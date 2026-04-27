@@ -6,7 +6,7 @@ REST API backend для системы управления спортивным
 
 ## Технологии
 
-- **Java 17+**
+- **Java 21+**
 - **Spring Boot 3**
 - **Spring Security**
 - **PostgreSQL**
@@ -18,7 +18,7 @@ REST API backend для системы управления спортивным
 
 ## Требования
 
-- Java 17+
+- Java 21+
 - PostgreSQL 14+
 - Maven 3.8+
 
