@@ -1,6 +1,7 @@
 package kg.sportmanager.configuration;
 
 import kg.sportmanager.repository.UserRepository;
+import kg.sportmanager.security.JwtAuthFilter;
 import kg.sportmanager.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
