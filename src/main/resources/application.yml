@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/sport_manager
     username: postgres
-    password: postgres
+    password: your_password
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -19,6 +19,11 @@ spring:
   messages:
     basename: messages
     encoding: UTF-8
+
+jwt:
+  secret: your_very_long_secret_key_minimum_256_bits
+  access-expiration: 900000       # 15 ?????
+  refresh-expiration: 2592000000  # 30 ????
 
 server:
   port: 8080

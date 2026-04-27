@@ -1,52 +1,39 @@
 package kg.sportmanager.entity;
 
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
-
 @Entity
-@Table(name = "users")
+@Table(name = "invite_codes")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+public class InviteCode {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    private String name;
-
     @Column(unique = true)
-    private String email;
+    private String code;
 
-    @Column(unique = true)
-    private String phone;
+    @ManyToOne
+    private User owner;
 
-    private String password;
+    private LocalDateTime expiresAt;
 
-    @Enumerated(EnumType.STRING)
-    private Role role;
-
-    private String refreshToken;
-
-    private boolean locked = false;
-
-    public enum Role {
-        OWNER, MANAGER
-    }
+    private boolean used = false;
 }
