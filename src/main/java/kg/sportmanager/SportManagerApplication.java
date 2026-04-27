@@ -1,13 +1,13 @@
-package kg.sportnamager.sport_namager;
+package kg.sportmanager;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SportNamagerApplication {
+public class SportManagerApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SportNamagerApplication.class, args);
+        SpringApplication.run(SportManagerApplication.class, args);
     }
 
 }
