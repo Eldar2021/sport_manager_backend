@@ -8,7 +8,7 @@
         <version>4.0.6</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>kg.sportmanager</groupId>
+    <groupId>kg.sportmanager</groupId>      
     <artifactId>sportmanager</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>sportmanager</name>
