@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: "jdbc:postgresql://${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}?sslmode=require"
-    username: "${DATABASE_USERNAME}"
-    password: "${DATABASE_PASSWORD}"
+    url: "jdbc:postgresql://localhost:5432/sport_manager?sslmode=require"
+    username: postgres
+    password: postgres
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
@@ -10,16 +10,16 @@ spring:
       connection-timeout: 30000
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update}
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
         format_sql: false
 
 server:
-  port: ${PORT:8080}
+  port: 8080
 
 jwt:
-  secret: "${JWT_SECRET}"
-  access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION:2592000000}
+  secret: "8fK29xLmQwPz91AaBcDeFgHiJkLmNoPqRsTuVwXyZ123456"
+  access-expiration: 900000
+  refresh-expiration: 2592000000

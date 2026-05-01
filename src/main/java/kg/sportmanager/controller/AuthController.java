@@ -23,17 +23,20 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+
 public class AuthController {
 
     private final AuthService authService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+        log.info("Login request: {}", request);
         return ResponseEntity.ok(authService.login(request));
     }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
+        log.info("Register request: {}", request);
         return ResponseEntity.ok(authService.register(request));
     }
 
