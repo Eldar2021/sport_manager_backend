@@ -3,7 +3,6 @@ package kg.sportmanager.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -45,4 +44,25 @@ public class Session {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Tables.TarifType tarifTypeSnapshot;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id")
+    private User manager;                    // кто начал/завершил сессию
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private SessionStatus status;           // COMPLETED | CANCELLED | ACTIVE
+
+    private Instant endedAt;                // когда завершилась
+
+    private Integer durationSeconds;        // длительность в секундах (null если CANCELLED)
+
+    private Long totalAmount;               // итоговая сумма (null если CANCELLED)
+
+    private String cancelReason;
+
+    public enum SessionStatus {
+        ACTIVE, COMPLETED, CANCELLED
+    }
 }
+
