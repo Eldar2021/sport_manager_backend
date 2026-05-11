@@ -178,8 +178,8 @@ public class HomeServiceImpl implements HomeService {
                 .tarifType(request.getTarifType())
                 .build();
 
-        tableRepository.save(table);
-        return mapper.toTableResponse(table, null);
+        Tables saved = tableRepository.saveAndFlush(table);
+        return mapper.toTableResponse(saved, null);
     }
 
     @Override
