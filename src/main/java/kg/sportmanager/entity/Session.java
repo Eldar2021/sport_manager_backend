@@ -18,7 +18,7 @@ public class Session {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id", nullable = false)
     private Tables table;
 
