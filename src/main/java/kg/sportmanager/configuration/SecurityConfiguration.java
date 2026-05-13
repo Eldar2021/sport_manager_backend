@@ -1,6 +1,8 @@
 package kg.sportmanager.configuration;
 
 import kg.sportmanager.repository.UserRepository;
+import kg.sportmanager.security.JwtAccessDeniedHandler;
+import kg.sportmanager.security.JwtAuthEntryPoint;
 import kg.sportmanager.security.JwtAuthFilter;
 import kg.sportmanager.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,8 @@ public class SecurityConfiguration {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final JwtAuthEntryPoint authEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -40,14 +44,18 @@ public class SecurityConfiguration {
                                 "/auth/register",
                                 "/auth/forgot-password",
                                 "/auth/refresh",
-                                "/api/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
                                 "/v3/api-docs",
                                 "/swagger-resources/**",
-                                "/webjars/**").permitAll()
+                                "/webjars/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
                 )
                 .addFilterBefore(jwtFilter(), UsernamePasswordAuthenticationFilter.class);
 
