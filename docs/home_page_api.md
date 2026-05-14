@@ -81,21 +81,21 @@ Validation hatası ise `details` field'ı doldurulur:
 
 ### Error Code Listesi
 
-| Code                       | HTTP | Anlamı                                      |
-| -------------------------- | :--: | ------------------------------------------- |
-| `VALIDATION_ERROR`         | 422  | Body validation başarısız                   |
-| `BAD_REQUEST`              | 400  | Geçersiz istek                              |
-| `UNAUTHORIZED`             | 401  | Token yok / geçersiz / süresi dolmuş        |
-| `FORBIDDEN`                | 403  | Bu işlem için yetkin yok                    |
-| `VENUE_NOT_FOUND`          | 404  | Mekan bulunamadı                            |
-| `TABLE_NOT_FOUND`          | 404  | Masa bulunamadı                             |
-| `VENUE_NUMBER_TAKEN`       | 409  | Bu mekan numarası zaten kullanılıyor        |
-| `TABLE_NUMBER_TAKEN`       | 409  | Bu masa numarası mekanda zaten var          |
-| `VENUE_HAS_TABLES`         | 409  | Mekanın içinde masalar var, önce onları sil |
-| `TABLE_HAS_ACTIVE_SESSION` | 409  | Masada aktif session var, silinemez         |
+| Code                       | HTTP | Anlamı                                                                                                                                              |
+| -------------------------- | :--: | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`         | 422  | Body validation başarısız                                                                                                                           |
+| `BAD_REQUEST`              | 400  | Geçersiz istek                                                                                                                                      |
+| `UNAUTHORIZED`             | 401  | Token yok / geçersiz / süresi dolmuş                                                                                                                |
+| `FORBIDDEN`                | 403  | Bu işlem için yetkin yok                                                                                                                            |
+| `VENUE_NOT_FOUND`          | 404  | Mekan bulunamadı                                                                                                                                    |
+| `TABLE_NOT_FOUND`          | 404  | Masa bulunamadı                                                                                                                                     |
+| `VENUE_NUMBER_TAKEN`       | 409  | Bu mekan numarası zaten kullanılıyor                                                                                                                |
+| `TABLE_NUMBER_TAKEN`       | 409  | Bu masa numarası mekanda zaten var                                                                                                                  |
+| `VENUE_HAS_TABLES`         | 409  | Mekanın içinde masalar var, önce onları sil                                                                                                         |
+| `TABLE_HAS_ACTIVE_SESSION` | 409  | Masada aktif session var, silinemez                                                                                                                 |
 | `SUBSCRIPTION_REQUIRED`    | 403  | Owner aboneliği `EXPIRED` veya `GRACE@0` (yazma gate; bkz. [subscription-api.md](subscription-api.md#subscription-gate--diğer-endpointlere-etkisi)) |
-| `INTERNAL_SERVER_ERROR`    | 500  | Beklenmeyen sunucu hatası                   |
-| `SERVICE_UNAVAILABLE`      | 503  | Servis geçici olarak kullanılamıyor         |
+| `INTERNAL_SERVER_ERROR`    | 500  | Beklenmeyen sunucu hatası                                                                                                                           |
+| `SERVICE_UNAVAILABLE`      | 503  | Servis geçici olarak kullanılamıyor                                                                                                                 |
 
 ---
 
