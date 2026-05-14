@@ -34,6 +34,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /** Reports/Managers: найти менеджера по id с проверкой принадлежности владельцу. */
     Optional<User> findByIdAndOwnerAndDeletedAtIsNull(UUID id, User owner);
 
+    /**
+     * Reports detail audit lookup: deleted-status'a bakmadan owner-bound user'ı bulur.
+     * Owner manager'ı sildikten sonra geçmiş raporları görüntüleyebilsin diye
+     * Reports detay sayfası bunu kullanır; live yönetim akışları
+     * {@link #findByIdAndOwnerAndDeletedAtIsNull} kullanmaya devam eder.
+     */
+    Optional<User> findByIdAndOwner(UUID id, User owner);
+
     /** Profile: число активных (не soft-deleted) менеджеров у данного владельца. */
     long countByOwnerAndRoleAndDeletedAtIsNull(User owner, User.Role role);
 

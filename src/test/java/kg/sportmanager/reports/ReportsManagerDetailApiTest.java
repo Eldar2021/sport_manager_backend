@@ -129,19 +129,59 @@ class ReportsManagerDetailApiTest extends ReportsTestSupport {
     }
 
     @Test
-    @DisplayName("Soft-deleted manager → 404 MANAGER_NOT_FOUND (tarihsel session olsa bile)")
-    void softDeletedManager_returns404() throws Exception {
+    @DisplayName("BUG fix: Silinmiş manager için /managers/{id} → 200 (audit trail; tester bug raporu)")
+    void softDeletedManager_returnsAnalytics() throws Exception {
+        // Tester raporu: owner manager'ı sildikten sonra geçmiş analytics'i göremiyor (404).
+        // Doğru davranış: list endpoint'i deleted manager'ı (geçmiş session varsa) gösterir;
+        // detail endpoint de aynı satıra tıklandığında 200 dönmeli.
         User owner = createOwner("owner@x.com", "+996700001609", "Test1234");
         createActiveTrial(owner);
         User mgr = createManager("mgr@x.com", "+996700001610", "Test1234", owner);
+        kg.sportmanager.entity.Tables t = createTable(createVenue(owner, "V", 1, true),
+                "T", 1, 100, kg.sportmanager.entity.Tables.TarifType.HOUR);
+        Instant from = Instant.parse("2026-05-01T00:00:00Z");
+        Instant to = Instant.parse("2026-05-15T00:00:00Z");
+        // Past activity by mgr (will live on in reports)
+        completedSession(t, mgr, Instant.parse("2026-05-02T10:00:00Z"),
+                Instant.parse("2026-05-02T11:00:00Z"), 200);
+        cancelledSession(t, mgr, Instant.parse("2026-05-03T10:00:00Z"), "test");
+
+        // Soft-delete the manager
         mgr.setDeletedAt(Instant.now());
         userRepository.saveAndFlush(mgr);
-        Venue v = createVenue(owner, "V", 1, true);
+
+        mockMvc.perform(getWithBearer(url(mgr.getId().toString(),
+                        t.getVenue().getId().toString(), from, to), accessFor(owner)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.summary.managerId").value(mgr.getId().toString()))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.summary.revenue").value(200))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.summary.sessions").value(1))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.summary.cancelCount").value(1))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.sessionLog.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("Multi-tenant: başka owner'ın silinmiş manager'ı yine 404 (deleted bypass info-leak'e yol açmaz)")
+    void deletedManagerOfOtherOwner_stillReturns404() throws Exception {
+        User o1 = createOwner("o1@x.com", "+996700001620", "Test1234");
+        createActiveTrial(o1);
+        User o2 = createOwner("o2@x.com", "+996700001621", "Test1234");
+        createActiveTrial(o2);
+        User othersMgr = createManager("othmgr@x.com", "+996700001622", "Test1234", o2);
+        othersMgr.setDeletedAt(Instant.now());
+        userRepository.saveAndFlush(othersMgr);
+        kg.sportmanager.entity.Venue v1 = createVenue(o1, "V", 1, true);
 
         Instant from = Instant.parse("2026-05-01T00:00:00Z");
         Instant to = Instant.parse("2026-05-15T00:00:00Z");
 
-        mockMvc.perform(getWithBearer(url(mgr.getId().toString(), v.getId().toString(), from, to), accessFor(owner)))
+        mockMvc.perform(getWithBearer(url(othersMgr.getId().toString(),
+                        v1.getId().toString(), from, to), accessFor(o1)))
                 .andExpect(status().isNotFound());
     }
 }

@@ -422,16 +422,23 @@ public class ReportsServiceImpl implements ReportsService {
     }
 
     /**
-     * Менеджер для report-detail. OWNER, который сам стартует/закрывает сессии,
-     * появляется в /reports/managers с managerId = owner.id; чтобы detail-страница
-     * не упала с MANAGER_NOT_FOUND, разрешаем owner-у быть «менеджером самого себя».
+     * Менеджер для report-detail.
+     * <p>Два audit-кейса, из-за которых здесь НЕТ {@code deletedAt IS NULL} фильтра:
+     * <ol>
+     *   <li>OWNER, который сам стартует сессии, появляется в {@code /reports/managers}
+     *       со своим owner-id; detail должен открыться (mapping owner-as-self).</li>
+     *   <li>Soft-deleted manager: после увольнения owner всё ещё должен видеть
+     *       историческую аналитику (raporu лист уже показывает его строку,
+     *       если есть прошлые сессии — detail обязан совпадать).</li>
+     * </ol>
+     * Multi-tenant изоляция сохраняется: {@code findByIdAndOwner} requires owner-id match.
      */
     private User resolveManager(User owner, String managerId) {
         UUID id = parseUuid(managerId);
         if (id.equals(owner.getId())) {
-            return owner; // owner как «менеджер» своих собственных сессий
+            return owner; // owner as «manager» of his own sessions
         }
-        return userRepository.findByIdAndOwnerAndDeletedAtIsNull(id, owner)
+        return userRepository.findByIdAndOwner(id, owner)
                 .filter(u -> u.getRole() == User.Role.MANAGER)
                 .orElseThrow(() -> new AppException("MANAGER_NOT_FOUND", HttpStatus.NOT_FOUND));
     }
