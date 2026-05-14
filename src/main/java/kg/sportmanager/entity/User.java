@@ -41,10 +41,13 @@ public class User implements UserDetails {
 
     private String name;
 
-    @Column(unique = true)
+    // NOTE: уникальность контролируется application-level через
+    // existsByEmailAndDeletedAtIsNull / existsByPhoneAndDeletedAtIsNull
+    // (soft-deleted/анонимизированные строки имеют email=phone=null и не
+    // блокируют повторную регистрацию). DB-level partial unique индекс
+    // добавится миграцией позже при необходимости.
     private String email;
 
-    @Column(unique = true)
     private String phone;
 
     /**

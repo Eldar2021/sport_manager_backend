@@ -11,7 +11,12 @@ import kg.sportmanager.dto.response.UserResponse;
 import kg.sportmanager.entity.InviteCode;
 import kg.sportmanager.entity.User;
 import kg.sportmanager.repository.InviteCodeRepository;
+import kg.sportmanager.repository.PaymentRepository;
+import kg.sportmanager.repository.SessionRepository;
+import kg.sportmanager.repository.SubscriptionRepository;
+import kg.sportmanager.repository.TableRepository;
 import kg.sportmanager.repository.UserRepository;
+import kg.sportmanager.repository.VenueRepository;
 import kg.sportmanager.security.JwtUtil;
 import kg.sportmanager.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -19,8 +24,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import kg.sportmanager.exception.AppException;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -31,6 +38,11 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final InviteCodeRepository inviteCodeRepository;
+    private final VenueRepository venueRepository;
+    private final TableRepository tableRepository;
+    private final SessionRepository sessionRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final PaymentRepository paymentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final kg.sportmanager.service.SubscriptionService subscriptionService;
@@ -51,10 +63,13 @@ public class AuthServiceImpl implements AuthService {
     }
 
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        // Соразмерять только активных (не soft-deleted) пользователей —
+        // удалённый аккаунт обнуляет email/phone, и тот же адрес можно
+        // зарегистрировать заново.
+        if (userRepository.existsByEmailAndDeletedAtIsNull(request.getEmail())) {
             throw new AppException("EMAIL_ALREADY_USED", HttpStatus.CONFLICT);
         }
-        if (userRepository.existsByPhone(request.getPhone())) {
+        if (userRepository.existsByPhoneAndDeletedAtIsNull(request.getPhone())) {
             throw new AppException("PHONE_ALREADY_USED", HttpStatus.CONFLICT);
         }
 
@@ -168,6 +183,62 @@ public class AuthServiceImpl implements AuthService {
                 .accessToken(newAccess)
                 .refreshToken(newRefresh)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteAccount(User user) {
+        if (user == null) {
+            throw new AppException("UNAUTHORIZED", HttpStatus.BAD_REQUEST);
+        }
+        if (user.getRole() == User.Role.OWNER) {
+            cascadeDeleteOwner(user);
+        } else {
+            softDeleteManager(user);
+        }
+    }
+
+    /**
+     * Каскадное удаление владельца: уничтожаем все данные, привязанные к нему,
+     * в правильном порядке (учёт FK-зависимостей), затем самого владельца.
+     *
+     * <p>Порядок: payments → subscriptions → sessions → invite codes →
+     * tables → venues → managers → owner.
+     */
+    private void cascadeDeleteOwner(User owner) {
+        // Каждый bulk-DELETE использует @Modifying(clearAutomatically=true,
+        // flushAutomatically=true), чтобы persistence context не держал stale
+        // ссылки между шагами. После последнего clear() сам owner попадает в
+        // detached state, поэтому удаляем его через deleteById (bulk-DELETE
+        // через id), а не через delete(entity).
+        paymentRepository.deleteAllBySubscriptionOwner(owner);
+        subscriptionRepository.deleteAllByOwner(owner);
+        sessionRepository.deleteAllByTableVenueOwner(owner);
+        inviteCodeRepository.deleteAllByOwner(owner);
+        tableRepository.deleteAllByVenueOwner(owner);
+        venueRepository.deleteAllByOwner(owner);
+        userRepository.deleteAllByOwner(owner); // managers (incl. soft-deleted)
+        userRepository.deleteById(owner.getId());
+        log.info("Cascade-deleted OWNER id={} and all related data", owner.getId());
+    }
+
+    /**
+     * Soft-delete менеджера: анонимизируем PII (email/phone), сбрасываем
+     * refresh, ставим deletedAt. Сохраняем {@code id}, {@code name}, {@code handle}
+     * и {@code owner} — чтобы owner-reports / managers-history продолжали
+     * корректно отображать историческую активность этого менеджера.
+     *
+     * <p>Тот же email/phone может зарегистрироваться заново — это будет
+     * полностью новый менеджер (новый UUID).
+     */
+    private void softDeleteManager(User manager) {
+        manager.setDeletedAt(Instant.now());
+        manager.setEmail(null);
+        manager.setPhone(null);
+        manager.setRefreshToken(null);
+        manager.setLocked(true); // belt-and-suspenders: login невозможен
+        userRepository.save(manager);
+        log.info("Soft-deleted MANAGER id={} (PII anonymized)", manager.getId());
     }
 
     @kg.sportmanager.security.RequiresActiveSubscription

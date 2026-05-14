@@ -24,4 +24,17 @@ public interface AuthService {
 
     /** Меняет пароль authenticated-пользователя. Ротация токенов (старый refresh инвалидируется). */
     TokenPairResponse updatePassword(User user, UpdatePasswordRequest request);
+
+    /**
+     * App Store / Play Store compliance:
+     * <ul>
+     *   <li><b>OWNER</b> — cascade hard-delete всех связанных данных (venues, tables,
+     *   sessions, invite codes, subscriptions, payments, managers) + own row.</li>
+     *   <li><b>MANAGER</b> — soft-delete с анонимизацией PII (email/phone/refresh = null,
+     *   deletedAt = now). Идентичность (name, handle) сохраняется, чтобы owner-reports
+     *   продолжали работать. Тот же email/phone может перерегистрироваться (partial
+     *   uniqueness через null email).</li>
+     * </ul>
+     */
+    void deleteAccount(User user);
 }
