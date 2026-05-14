@@ -37,7 +37,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
-            if (jwtUtil.check(token) == JwtUtil.TokenStatus.VALID) {
+            JwtUtil.TokenStatus tokenStatus = jwtUtil.check(token);
+            if (tokenStatus == JwtUtil.TokenStatus.VALID) {
                 String type = jwtUtil.extractType(token);
                 // Только access-токен пропускаем в SecurityContext — refresh туда не годится.
                 if (type == null || JwtUtil.TYPE_ACCESS.equals(type)) {
@@ -54,11 +55,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.clearContext();
                     request.setAttribute("jwt.error", "INVALID_TOKEN_TYPE");
                 }
-            } else if (jwtUtil.check(token) == JwtUtil.TokenStatus.EXPIRED) {
+            } else if (tokenStatus == JwtUtil.TokenStatus.EXPIRED) {
                 SecurityContextHolder.clearContext();
                 request.setAttribute("jwt.error", "SESSION_EXPIRED");
             } else {
+                // Malformed / bad-signature / unparseable
                 SecurityContextHolder.clearContext();
+                request.setAttribute("jwt.error", "INVALID_TOKEN");
             }
         }
 
