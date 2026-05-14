@@ -16,28 +16,34 @@ Spring Boot 3 / Java 21 project built with Maven (wrapper included).
 
 Docker build is multi-stage (`maven:3.9.9-eclipse-temurin-21-alpine` → `eclipse-temurin:21-jre-alpine`); the runtime image runs `java -jar app.jar` as a non-root `appuser`.
 
-## Required environment variables
+Swagger UI: `/swagger-ui.html` (OpenAPI JSON at `/v3/api-docs`) — both are public.
 
-[application.yml](src/main/resources/application.yml) has **no defaults** for the database or JWT secret — the app will fail to start without them:
+## Configuration
 
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` (JDBC URL is built with `?sslmode=require`)
-- `JWT_SECRET` (must be ≥256 bits)
-- Optional: `PORT` (8080), `DDL_AUTO` (update), `JWT_ACCESS_EXPIRATION` (15min), `JWT_REFRESH_EXPIRATION` (30d)
+[application.yml](src/main/resources/application.yml) currently ships with **hardcoded defaults** for local development (Postgres on `localhost:5432/sport_manager`, default JWT secret, `sslmode=require` on the JDBC URL). There is no `application-dev.yml` or env-var substitution wired in — to point at a different database or rotate the JWT secret, edit `application.yml` directly or override with `SPRING_DATASOURCE_URL` / `JWT_SECRET` system properties.
+
+Defaults at a glance: `jpa.hibernate.ddl-auto=update`, access token 15 min, refresh token 30 days, Hikari pool max 5.
 
 ## Architecture
 
 Single-module Spring Boot REST API under base package `kg.sportmanager`. Layered: `controller` → `service` (interface) + `service.impl` → `repository` (Spring Data JPA) → `entity`. DTOs in `dto/request` and `dto/response`; mapping helpers in `mapper/` and `util/CommonMapper.java`.
 
-### Two API surfaces with different auth rules
+### Controllers and route prefixes
 
-[SecurityConfiguration.java](src/main/java/kg/sportmanager/configuration/SecurityConfiguration.java) is stateless (no sessions, CSRF disabled) and splits routes:
+- [AuthController](src/main/java/kg/sportmanager/controller/AuthController.java) — `/auth/**` (login, register, refresh, forgot-password, logout, invite-code)
+- [HomePageController](src/main/java/kg/sportmanager/controller/HomePageController.java) — `/api/v1/**` (venue + table CRUD under `/api/v1/venue/**` and `/api/v1/table/**`)
+- [SessionController](src/main/java/kg/sportmanager/controller/SessionController.java) — `/api/v1/session/**` (start / pause / resume / complete / cancel a table session)
+- [ReportsController](src/main/java/kg/sportmanager/controller/ReportsController.java) — `/api/v1/reports/**`
 
-- **Public:** `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/refresh`, and **all `/api/v1/**`** are `permitAll()`. Note: `/api/v1/**` is wide-open at the filter chain level — [HomePageController](src/main/java/kg/sportmanager/controller/HomePageController.java) endpoints rely on `@AuthenticationPrincipal User` being non-null, which only happens if a Bearer token was sent and validated by the filter. There is currently no enforcement that an unauthenticated caller is rejected; service methods must defensively handle null users / authorize per-resource.
-- **Everything else:** requires authentication.
+### Auth rules
+
+[SecurityConfiguration.java](src/main/java/kg/sportmanager/configuration/SecurityConfiguration.java) is stateless (no sessions, CSRF disabled). Public routes: `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/refresh`, and Swagger (`/swagger-ui/**`, `/v3/api-docs/**`, `/swagger-resources/**`, `/webjars/**`). **Everything else — including all `/api/v1/**` — requires authentication.\*\* A missing/invalid token is rejected at the filter chain by [JwtAuthEntryPoint](src/main/java/kg/sportmanager/security/JwtAuthEntryPoint.java); 403s go through [JwtAccessDeniedHandler](src/main/java/kg/sportmanager/security/JwtAccessDeniedHandler.java).
+
+Role checks (OWNER vs MANAGER) are **not** enforced by URL patterns — they happen inside service methods that inspect `@AuthenticationPrincipal User`. When adding endpoints that should be OWNER-only (e.g. invite-code generation, venue creation), enforce that in the service layer, not via `SecurityConfiguration`.
 
 ### JWT flow
 
-[JwtAuthFilter](src/main/java/kg/sportmanager/security/JwtAuthFilter.java) runs before `UsernamePasswordAuthenticationFilter`, extracts the Bearer token, validates via [JwtUtil](src/main/java/kg/sportmanager/security/JwtUtil.java), and loads the [User](src/main/java/kg/sportmanager/entity/User.java) by UUID from the token's subject. The `User` entity itself implements `UserDetails`, so it's placed directly into the `SecurityContext` and can be injected with `@AuthenticationPrincipal User`.
+[JwtAuthFilter](src/main/java/kg/sportmanager/security/JwtAuthFilter.java) runs before `UsernamePasswordAuthenticationFilter`, extracts the Bearer token, validates via [JwtUtil](src/main/java/kg/sportmanager/security/JwtUtil.java), and loads the [User](src/main/java/kg/sportmanager/entity/User.java) by UUID from the token's subject. The `User` entity itself implements `UserDetails`, so it is placed directly into the `SecurityContext` and can be injected with `@AuthenticationPrincipal User`.
 
 Refresh tokens are persisted on `User.refreshToken` (single token per user — refreshing rotates and overwrites; logout clears it). See [AuthServiceImpl.buildAuthResponse](src/main/java/kg/sportmanager/service/impl/AuthServiceImpl.java).
 
@@ -48,13 +54,19 @@ Roles are `OWNER` and `MANAGER` (enum on `User`). MANAGER signup requires a sing
 This is a footgun to be aware of when adding endpoints:
 
 1. **`AuthServiceImpl`** throws `ResponseStatusException(status, "ERROR_CODE")` — Spring's default handler returns the status but the localized error body shape from the README is **not** produced for these.
-2. **`HomeService` flows** throw [AppException](src/main/java/kg/sportmanager/exception/AppException.java), caught by [GlobalExceptionHandler](src/main/java/kg/sportmanager/exception/GlobalExceptionHandler.java), which maps the code to a hard-coded `Map<String, Map<String, String>>` of `en`/`ru`/`ky` translations and returns an `ErrorResponse{code, message:{en,ru,ky}}`.
+2. **`HomeService` / `SessionService` flows** throw [AppException](src/main/java/kg/sportmanager/exception/AppException.java), caught by [GlobalExceptionHandler](src/main/java/kg/sportmanager/exception/GlobalExceptionHandler.java), which maps the code to a hard-coded `Map<String, Map<String, String>>` of `en`/`ru`/`ky` translations and returns an `ErrorResponse{code, message:{en,ru,ky}}`.
 
 When adding a new error code, register it in `GlobalExceptionHandler.MESSAGES` **and** prefer throwing `AppException` over `ResponseStatusException` so clients get the documented multilingual body. The `messages_*.properties` files exist but the handler does not currently read from them — translations live in code.
 
-### Domain entities
+### Domain entities and session lifecycle
 
-`User`, `InviteCode`, `Venue`, `Tables`, `Session`. Home/venue/table CRUD is in [HomePageController](src/main/java/kg/sportmanager/controller/HomePageController.java) under `/api/v1/venue/**` and `/api/v1/table/**`. JPA `ddl-auto=update` by default — schema migrations are implicit, no Flyway/Liquibase.
+Entities: `User`, `InviteCode`, `Venue`, `Tables`, `Session`. JPA `ddl-auto=update` — schema migrations are implicit, no Flyway/Liquibase, so any non-additive field change risks data loss; coordinate explicitly when renaming/dropping columns.
+
+[Session](src/main/java/kg/sportmanager/entity/Session.java) tracks a billing run on a `Tables`:
+
+- Status enum `ACTIVE | COMPLETED | CANCELLED` plus `isActive` / `isPaused` flags.
+- `tarifAmountSnapshot` and `tarifTypeSnapshot` are captured at session start, so price changes on the parent `Tables` after the fact do not affect in-flight or historical sessions.
+- Pause tracking accumulates into `totalPausedSeconds`; `durationSeconds` and `totalAmount` are computed on completion (null on CANCELLED). When modifying session math, keep snapshot fields and the pause accumulator authoritative — do not recompute pricing from the live `Tables`.
 
 ### i18n headers
 
