@@ -35,10 +35,10 @@ class UpdatePasswordApiTest extends AuthTestSupport {
         User reloaded = userRepository.findByEmail("owner@x.com").orElseThrow();
         assertThat(reloaded.getRefreshToken()).isEqualTo(body.get("refreshToken").asText());
 
-        // Login with old password fails
+        // Login with old password fails (400 INVALID_CREDENTIALS — yeni spec)
         mockMvc.perform(postJson("/api/v1/auth/login",
                         Map.of("username", "owner@x.com", "password", "OldPass12")))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isBadRequest());
 
         // Login with new password works
         mockMvc.perform(postJson("/api/v1/auth/login",
@@ -47,24 +47,24 @@ class UpdatePasswordApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("yanlış eski parola → 401 INVALID_CREDENTIALS")
-    void wrongOldPassword_returns401() throws Exception {
+    @DisplayName("yanlış eski parola → 400 INVALID_CREDENTIALS")
+    void wrongOldPassword_returns400() throws Exception {
         User u = createOwner("owner@x.com", "+996700000061", "OldPass12");
         String access = accessFor(u);
 
         MvcResult r = mockMvc.perform(withBearer(
                         postJson(URL, Map.of("oldPassword", "WrongOld!", "newPassword", "NewPass99")), access))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
         assertErrorEnvelope(body(r), "INVALID_CREDENTIALS");
     }
 
     @Test
-    @DisplayName("auth yok → 401 UNAUTHORIZED")
-    void noAuth_returns401() throws Exception {
+    @DisplayName("auth yok → 400 UNAUTHORIZED (401 sadece expired token için)")
+    void noAuth_returns400() throws Exception {
         MvcResult r = mockMvc.perform(postJson(URL,
                         Map.of("oldPassword", "X", "newPassword", "Test1234")))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
         assertErrorEnvelope(body(r), "UNAUTHORIZED");
     }

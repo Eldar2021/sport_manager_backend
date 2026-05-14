@@ -38,7 +38,7 @@ class RefreshApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("rotation: eski refresh ikinci kullanım → 401 SESSION_EXPIRED")
+    @DisplayName("rotation: eski refresh ikinci kullanım → 400 INVALID_TOKEN (revoked, not expired)")
     void rotatedRefresh_cannotBeReused() throws Exception {
         User u = createOwner("owner@x.com", "+996700000031", "Test1234");
         String oldRefresh = refreshFor(u, true);
@@ -47,9 +47,9 @@ class RefreshApiTest extends AuthTestSupport {
                 .andExpect(status().isOk());
 
         MvcResult r = mockMvc.perform(postJson(URL, Map.of("refreshToken", oldRefresh)))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
-        assertErrorEnvelope(body(r), "SESSION_EXPIRED");
+        assertErrorEnvelope(body(r), "INVALID_TOKEN");
     }
 
     @Test
@@ -67,29 +67,29 @@ class RefreshApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("invalid JWT → 401 SESSION_EXPIRED envelope")
-    void invalidRefresh_returns401() throws Exception {
+    @DisplayName("invalid JWT (malformed) → 400 INVALID_TOKEN (401 sadece expired için)")
+    void invalidRefresh_returns400() throws Exception {
         MvcResult r = mockMvc.perform(postJson(URL, Map.of("refreshToken", "not.a.jwt")))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
-        assertErrorEnvelope(body(r), "SESSION_EXPIRED");
+        assertErrorEnvelope(body(r), "INVALID_TOKEN");
     }
 
     @Test
-    @DisplayName("Access token /refresh'a gönderildi → 401 (sadece refresh kabul edilmeli)")
-    void accessTokenSentToRefresh_returns401() throws Exception {
+    @DisplayName("Access token /refresh'a gönderildi → 400 INVALID_TOKEN_TYPE")
+    void accessTokenSentToRefresh_returns400() throws Exception {
         User u = createOwner("owner@x.com", "+996700000032", "Test1234");
         String access = accessFor(u);
 
         MvcResult r = mockMvc.perform(postJson(URL, Map.of("refreshToken", access)))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
-        assertErrorEnvelope(body(r), "SESSION_EXPIRED");
+        assertErrorEnvelope(body(r), "INVALID_TOKEN_TYPE");
     }
 
     @Test
-    @DisplayName("refresh DB'de yok (logout sonrası) → 401 SESSION_EXPIRED")
-    void refreshNotInDb_returns401() throws Exception {
+    @DisplayName("refresh DB'de yok (logout sonrası) → 400 INVALID_TOKEN (revoked)")
+    void refreshNotInDb_returns400() throws Exception {
         User u = createOwner("owner@x.com", "+996700000033", "Test1234");
         String refresh = refreshFor(u, true);
         // logout simulation:
@@ -97,9 +97,9 @@ class RefreshApiTest extends AuthTestSupport {
         userRepository.saveAndFlush(u);
 
         MvcResult r = mockMvc.perform(postJson(URL, Map.of("refreshToken", refresh)))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
-        assertErrorEnvelope(body(r), "SESSION_EXPIRED");
+        assertErrorEnvelope(body(r), "INVALID_TOKEN");
     }
 
     @Test
@@ -110,5 +110,27 @@ class RefreshApiTest extends AuthTestSupport {
 
         mockMvc.perform(postJson(URL, Map.of("refreshToken", refresh)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("expired refresh token → 401 SESSION_EXPIRED (yalnız bu durum 401)")
+    void expiredRefresh_returns401() throws Exception {
+        User u = createOwner("owner@x.com", "+996700000035", "Test1234");
+        // jjwt aynı signing key ile imzalanmış ama exp tarihi geçmiş bir refresh üretiyoruz.
+        String expired = io.jsonwebtoken.Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())
+                .setSubject(u.getId().toString())
+                .claim("type", "refresh")
+                .setIssuedAt(new java.util.Date(System.currentTimeMillis() - 3_600_000))
+                .setExpiration(new java.util.Date(System.currentTimeMillis() - 1_000))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                        "test-secret-key-please-do-not-use-in-production-1234567890"
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .compact();
+
+        MvcResult r = mockMvc.perform(postJson(URL, Map.of("refreshToken", expired)))
+                .andExpect(status().isUnauthorized())
+                .andReturn();
+        assertErrorEnvelope(body(r), "SESSION_EXPIRED");
     }
 }

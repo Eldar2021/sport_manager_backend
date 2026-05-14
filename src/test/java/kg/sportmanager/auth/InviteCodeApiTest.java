@@ -71,18 +71,20 @@ class InviteCodeApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("Auth header yok → 401 UNAUTHORIZED")
-    void noAuth_returns401() throws Exception {
+    @DisplayName("Auth header yok → 400 UNAUTHORIZED (401 sadece expired için)")
+    void noAuth_returns400() throws Exception {
         MvcResult r = mockMvc.perform(post(URL))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
         assertErrorEnvelope(body(r), "UNAUTHORIZED");
     }
 
     @Test
-    @DisplayName("Bozuk token → 401")
-    void invalidToken_returns401() throws Exception {
-        mockMvc.perform(withBearer(post(URL), "not.a.jwt"))
-                .andExpect(status().isUnauthorized());
+    @DisplayName("Bozuk token → 400 INVALID_TOKEN")
+    void invalidToken_returns400() throws Exception {
+        MvcResult r = mockMvc.perform(withBearer(post(URL), "not.a.jwt"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+        assertErrorEnvelope(body(r), "INVALID_TOKEN");
     }
 }

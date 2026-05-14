@@ -47,22 +47,22 @@ class LoginApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("yanlış parola → 401 INVALID_CREDENTIALS + envelope")
-    void wrongPassword_returns401Envelope() throws Exception {
+    @DisplayName("yanlış parola → 400 INVALID_CREDENTIALS + envelope (401 sadece expired için)")
+    void wrongPassword_returns400Envelope() throws Exception {
         createOwner("owner@x.com", "+996700000003", "Test1234");
 
         MvcResult r = mockMvc.perform(postJson(URL, loginPayload("owner@x.com", "WrongPass1")))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
 
         assertErrorEnvelope(body(r), "INVALID_CREDENTIALS");
     }
 
     @Test
-    @DisplayName("bilinmeyen kullanıcı → 401 INVALID_CREDENTIALS (kullanıcı sızdırmaz)")
-    void unknownUser_returns401() throws Exception {
+    @DisplayName("bilinmeyen kullanıcı → 400 INVALID_CREDENTIALS (kullanıcı sızdırmaz)")
+    void unknownUser_returns400() throws Exception {
         MvcResult r = mockMvc.perform(postJson(URL, loginPayload("nobody@x.com", "Test1234")))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
 
         assertErrorEnvelope(body(r), "INVALID_CREDENTIALS");
@@ -113,13 +113,13 @@ class LoginApiTest extends AuthTestSupport {
     }
 
     @Test
-    @DisplayName("yanlış login sırasında stale Bearer header'ı ignored olmalı")
-    void wrongLogin_withStaleBearer_stillReturns401Envelope() throws Exception {
+    @DisplayName("yanlış login sırasında stale Bearer header'ı ignored olmalı → 400 INVALID_CREDENTIALS")
+    void wrongLogin_withStaleBearer_returns400Envelope() throws Exception {
         createOwner("owner@x.com", "+996700000005", "Test1234");
 
         MvcResult r = mockMvc.perform(postJson(URL, loginPayload("owner@x.com", "Wrong"))
                         .header("Authorization", "Bearer not.a.valid.token"))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isBadRequest())
                 .andReturn();
 
         assertErrorEnvelope(body(r), "INVALID_CREDENTIALS");
