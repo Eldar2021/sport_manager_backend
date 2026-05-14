@@ -13,6 +13,11 @@ public class MessageConfiguration {
         ResourceBundleMessageSource source = new ResourceBundleMessageSource();
         source.setBasename("messages");
         source.setDefaultEncoding("UTF-8");
+        // Системная locale JVM не должна влиять на fallback: иначе messages_*.properties
+        // случайно подменяются переводом активной системной локали (например, ky/ru вместо en).
+        source.setFallbackToSystemLocale(false);
+        // Базовый бандл messages.properties — английский; используем его как явный default.
+        source.setDefaultLocale(java.util.Locale.ENGLISH);
         return source;
     }
 }

@@ -82,21 +82,17 @@ public class SessionServiceImpl implements SessionService {
         Session session = findActiveSession(sessionId);
         validateTableAccess(user, session.getTable());
 
-        // Сессия должна быть в статусе ACTIVE (не PAUSED)
+        // Двойной pause недопустим — иначе pausedAt перетирается и
+        // накопленное время паузы между двумя кликами теряется (занижение billable).
+        if (session.isPaused()) {
+            throw new AppException("SESSION_ALREADY_PAUSED", HttpStatus.CONFLICT);
+        }
         if (session.getStatus() != Session.SessionStatus.ACTIVE) {
             throw new AppException("SESSION_NOT_ACTIVE", HttpStatus.CONFLICT);
         }
 
-        Instant now = Instant.now(); // Время пишет backend
-
         session.setPaused(true);
-        session.setPausedAt(now);
-        session.setStatus(Session.SessionStatus.ACTIVE); // статус остаётся ACTIVE, isPaused=true
-
-        // Нет отдельного статуса PAUSED в enum — используем isPaused флаг.
-        // Но по API-спецификации status в ответе должен быть "PAUSED",
-        // поэтому заводим вспомогательный маппинг через флаг isPaused.
-
+        session.setPausedAt(Instant.now());
         sessionRepository.save(session);
         return mapper.toLite(session);
     }
@@ -111,21 +107,20 @@ public class SessionServiceImpl implements SessionService {
         Session session = findActiveSession(sessionId);
         validateTableAccess(user, session.getTable());
 
-        // Сессия должна быть в паузе
         if (!session.isPaused()) {
             throw new AppException("SESSION_NOT_PAUSED", HttpStatus.CONFLICT);
         }
 
-        Instant now = Instant.now(); // Время пишет backend
-
-        // Накопительно суммируем паузу
-        long pausedDuration = now.getEpochSecond() - session.getPausedAt().getEpochSecond();
+        Instant now = Instant.now();
+        // pausedAt должен быть выставлен в pause(); defensive guard на случай
+        // ручной модификации БД или будущих миграций со сбитыми инвариантами.
+        Instant pausedAt = session.getPausedAt() != null ? session.getPausedAt() : now;
+        long pausedDuration = now.getEpochSecond() - pausedAt.getEpochSecond();
         session.setTotalPausedSeconds(session.getTotalPausedSeconds() + (int) pausedDuration);
 
         session.setPaused(false);
         session.setResumedAt(now);
         session.setPausedAt(null);
-
         sessionRepository.save(session);
         return mapper.toLite(session);
     }
@@ -187,22 +182,15 @@ public class SessionServiceImpl implements SessionService {
     public SessionResultResponse cancel(User user, String sessionId, CancelSessionRequest request) {
         Session session = findActiveSession(sessionId);
         validateTableAccess(user, session.getTable());
+        // reason: @NotBlank @Size(1..200) на DTO + @Valid в контроллере — отдельной проверки не требуется.
 
-        // Валидация reason
-        if (request.getReason() == null || request.getReason().isBlank()
-                || request.getReason().length() > 200) {
-            throw new AppException("VALIDATION_ERROR", HttpStatus.UNPROCESSABLE_ENTITY);
-        }
-
-        // Проверка окна отмены для менеджера
+        Instant now = Instant.now();
         if (user.getRole() == User.Role.MANAGER) {
-            long secondsSinceStart = Instant.now().getEpochSecond() - session.getStartedAt().getEpochSecond();
+            long secondsSinceStart = now.getEpochSecond() - session.getStartedAt().getEpochSecond();
             if (secondsSinceStart > CANCEL_WINDOW_SECONDS) {
                 throw new AppException("CANCEL_WINDOW_EXPIRED", HttpStatus.UNPROCESSABLE_ENTITY);
             }
         }
-
-        Instant now = Instant.now(); // Время пишет backend
 
         session.setActive(false);
         session.setPaused(false);
@@ -220,8 +208,9 @@ public class SessionServiceImpl implements SessionService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Ищем активную (isActive=true) сессию по ID.
-     * Для COMPLETED/CANCELLED сессий isActive=false → SESSION_ALREADY_COMPLETED.
+     * Ищем активную (isActive=true) сессию по ID. Для COMPLETED/CANCELLED
+     * сессий isActive=false — отдаём корректный код по итоговому статусу,
+     * чтобы клиент мог показать «уже завершена» vs «уже отменена».
      */
     private Session findActiveSession(String sessionId) {
         UUID id = parseUuid(sessionId);
@@ -229,7 +218,10 @@ public class SessionServiceImpl implements SessionService {
                 .orElseThrow(() -> new AppException("SESSION_NOT_FOUND", HttpStatus.NOT_FOUND));
 
         if (!session.isActive()) {
-            throw new AppException("SESSION_ALREADY_COMPLETED", HttpStatus.CONFLICT);
+            String code = session.getStatus() == Session.SessionStatus.CANCELLED
+                    ? "SESSION_ALREADY_CANCELLED"
+                    : "SESSION_ALREADY_COMPLETED";
+            throw new AppException(code, HttpStatus.CONFLICT);
         }
         return session;
     }
