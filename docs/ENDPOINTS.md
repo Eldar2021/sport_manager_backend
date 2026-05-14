@@ -29,6 +29,7 @@
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/logout` (permitAll; token varsa kullanıcı tanınır, yoksa 400 LOGOUT_FAILED)
 - `GET /actuator/health` (ops)
 - `GET /swagger-ui.html`, `/v3/api-docs/**` (docs)
 
@@ -251,6 +252,30 @@ Her refresh çağrısı yeni refresh token üretir (rotation). Eski refresh toke
 
 ---
 
+## 1.7b DELETE `/api/v1/auth/account` — Authenticated (Both roles)
+
+App Store / Play Store uyumluluğu — kullanıcı kendi hesabını siler.
+
+**Request:** Body yok. Header'da `Authorization: Bearer ...`.
+
+**Response 200:** Body yok.
+
+**Davranış (role'e göre):**
+
+- **OWNER** → cascade hard-delete: payments → subscriptions → sessions → invite codes → tables → venues → managers → owner. Email/phone tekrar register için serbest.
+- **MANAGER** → soft-delete + PII anonymize: `deletedAt=now`, `email=null`, `phone=null`, `refreshToken=null`, `locked=true`. `name`/`handle`/`owner` korunur (owner'ın reports'u için). Aynı email/phone tekrar register edilebilir (yeni UUID).
+
+**Errors:**
+| HTTP | code |
+|------|------|
+| 400 | `UNAUTHORIZED` (token yok) |
+| 400 | `INVALID_TOKEN` (token bozuk) |
+| 401 | `SESSION_EXPIRED` (access token expired) |
+
+> Cascade tamamlandıktan sonra eski access token DB'de kullanıcı bulamayacağı için sonraki istekte 400 UNAUTHORIZED döner. Mobile silme sonrası lokal token'ı temizleyip login ekranına yönlenir.
+
+---
+
 ## 1.7 POST `/api/v1/auth/update-password` — Authenticated (Both roles)
 
 Authenticated kullanıcının parolasını günceller. Yeni token pair döner;
@@ -345,6 +370,37 @@ kaydı yoksa `profileData.subscription = null`.
 | 400 | `UNAUTHORIZED` (token yok) |
 | 400 | `INVALID_TOKEN` / `INVALID_TOKEN_TYPE` (bozuk veya yanlış tip) |
 | 401 | `SESSION_EXPIRED` (access token expired) |
+
+---
+
+## 1.9 DELETE `/api/v1/auth/account` — Authenticated (Both roles)
+
+App Store / Play Store uyumluluğu. Kullanıcı kendi hesabını siler.
+
+**Davranış role'e göre farklı:**
+
+| Role      | Davranış                                                                                                                                                                                                                                       |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OWNER`   | **Cascade hard-delete** — venues, tables, sessions, invite codes, subscriptions, payments, manager hesapları + owner satırı silinir. Aynı email/phone tekrar register edilebilir.                                                              |
+| `MANAGER` | **Soft-delete + PII anonymization** — `deletedAt = now`, `email/phone/refreshToken = null`, `locked = true`. `id`, `name`, `handle`, `owner` korunur (owner'ın reports geçmişi için). Aynı email/phone tekrar register edilebilir (yeni UUID). |
+
+**Request:** Body yok. Yalnız `Authorization: Bearer <accessToken>` header'ı.
+
+**Response 200:** Body yok.
+
+**Errors:**
+| HTTP | code |
+|------|------|
+| 400 | `UNAUTHORIZED` (token yok) |
+| 400 | `INVALID_TOKEN` / `INVALID_TOKEN_TYPE` |
+| 401 | `SESSION_EXPIRED` (access token expired) |
+
+**Önemli notlar:**
+
+- Mobile bu yanıttan sonra **local token'ı temizleyip login ekranına yönlendirmelidir**.
+- OWNER silindiğinde altındaki **tüm manager hesapları da hard-delete edilir** (tasarım kararı).
+- Silinmiş MANAGER reports'larda hâlâ görünür (`Session.managerId` üzerinden); `name`/`handle` korunduğu için UI'da bilinmeyen kullanıcı görünmez.
+- Re-registration: aynı email/phone yeniden register edilebilir; tamamen sıfır state ile yeni bir kullanıcı oluşur.
 
 ---
 

@@ -62,4 +62,9 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
             @Param("manager") User manager,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /** Account-delete cascade: drop all sessions for tables in owner's venues. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Session s WHERE s.table.venue.owner = :owner")
+    int deleteAllByTableVenueOwner(@Param("owner") User owner);
 }

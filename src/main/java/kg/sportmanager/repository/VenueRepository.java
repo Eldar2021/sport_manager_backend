@@ -25,4 +25,9 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     Optional<Venue> findFirstByOwnerAndDeletedAtIsNullOrderByCreatedAtAsc(User owner);
 
     long countByOwnerAndDeletedAtIsNull(User owner);
+
+    /** Account-delete cascade: drop all venues for given owner (incl. soft-deleted). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("DELETE FROM Venue v WHERE v.owner = :owner")
+    int deleteAllByOwner(@org.springframework.data.repository.query.Param("owner") User owner);
 }

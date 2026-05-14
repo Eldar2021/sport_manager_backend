@@ -335,6 +335,48 @@ yeniyi `bcrypt`'le hash'leyip kaydeder ve **yeni bir token pair** döndürür
 
 ---
 
+## 8. DELETE `/api/v1/auth/account`
+
+**Auth:** required (`Authorization: Bearer <accessToken>`) — OWNER + MANAGER her ikisi.
+
+App Store / Play Store uyumluluğu için kullanıcı kendi hesabını silebilir.
+Davranış role'e göre farklıdır:
+
+| Role      | Davranış                                                                                                                                                                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OWNER`   | **Cascade hard-delete.** Owner'a ait tüm veri tamamen silinir: venues, tables, sessions, invite codes, subscriptions, payments, manager kullanıcıları **ve** owner satırının kendisi. Email/phone tekrar register için serbest kalır.                                                                    |
+| `MANAGER` | **Soft-delete + PII anonymization.** `deletedAt = now`, `email = null`, `phone = null`, `refreshToken = null`, `locked = true`. `id`, `name`, `handle`, `owner` **korunur** ki owner'ın reports'unda manager'ın geçmişi görünmeye devam etsin. Aynı email/phone tekrar register edilebilir (fresh UUID). |
+
+### Request
+
+Body yok. Yalnız `Authorization` header'ı.
+
+### 200 OK
+
+Body yok. İşlem başarılı.
+
+> Mobile bu yanıttan sonra local token'ı temizleyip kullanıcıyı login ekranına
+> yönlendirmelidir. Owner için token zaten geçersizdir (kullanıcı satırı silindi).
+> Manager için `locked = true` ve `refreshToken = null` set edilmiştir;
+> ileride bu token ile yapılacak istekler login'e zorlayacak.
+
+### Errors
+
+| HTTP | `code`            | Trigger                              |
+| ---- | ----------------- | ------------------------------------ |
+| 400  | `UNAUTHORIZED`    | Token yok                            |
+| 400  | `INVALID_TOKEN`   | Token bozuk / imza geçersiz / revoke |
+| 401  | `SESSION_EXPIRED` | Access token **expired**             |
+
+### Önemli notlar
+
+- **Re-registration:** Owner silindikten sonra aynı email'le yeni OWNER kaydı yapılabilir; tamamen sıfır state ile başlar (yeni TRIAL otomatik oluşur). Manager için de aynı şey geçerli — yeni invite kodu ile aynı email/phone tekrar register edilebilir, yeni UUID alır.
+- **Reports korunması (MANAGER):** Silinmiş manager hâlâ `Session.managerId` ile geçmiş session'lara bağlıdır; reports endpoint'leri (`/api/v1/reports/managers`, `/api/v1/reports/managers/{id}`) bu manager'ın geçmiş performansını göstermeye devam eder. `name` ve `handle` (display alanları) korunduğu için UI'da bilinmeyen kullanıcı görünmez.
+- **OWNER → MANAGER cascade:** OWNER silindiğinde altındaki **tüm manager hesapları da hard-delete edilir** (tasarım kararı: owner'ın verisi gittikten sonra manager'ların verisi de pratikte kalmadığı için, onları da silmek doğru).
+- **Audit log:** Backend `INFO` seviyesinde log atar (`Cascade-deleted OWNER id=...` / `Soft-deleted MANAGER id=...`). Şu an ayrı bir audit tablosu yok; istenirse v2'de eklenebilir.
+
+---
+
 ## Models — Alan referansı
 
 ### `UserModel`
@@ -424,19 +466,20 @@ Backend tüm hata yanıtlarını tutarlı bir zarfla gönderir — istemci taraf
 
 Backend tüm auth-fail durumlarını aşağıdaki şekilde ayrıştırır:
 
-| Durum                                           | HTTP | `code`                           |
-| ----------------------------------------------- | ---- | -------------------------------- |
-| Access token expired                            | 401  | `SESSION_EXPIRED`                |
-| Refresh token expired                           | 401  | `SESSION_EXPIRED`                |
-| Login yanlış email/parola                       | 400  | `INVALID_CREDENTIALS`            |
-| Update-password yanlış eski parola              | 400  | `INVALID_CREDENTIALS`            |
-| Bearer header yok / token bozuk                 | 400  | `UNAUTHORIZED` / `INVALID_TOKEN` |
-| Refresh token /authenticated-route'a gönderildi | 400  | `INVALID_TOKEN_TYPE`             |
-| Access token /refresh'a gönderildi              | 400  | `INVALID_TOKEN_TYPE`             |
-| Refresh token DB'de yok (rotated/logout)        | 400  | `INVALID_TOKEN`                  |
-| Logout: token yok/bozuk/expired                 | 400  | `LOGOUT_FAILED`                  |
-| OWNER-only endpoint'i MANAGER çağırdı           | 403  | `FORBIDDEN`                      |
-| Subscription gate (EXPIRED/GRACE@0)             | 403  | `SUBSCRIPTION_REQUIRED`          |
+| Durum                                                         | HTTP | `code`                           |
+| ------------------------------------------------------------- | ---- | -------------------------------- |
+| Access token expired                                          | 401  | `SESSION_EXPIRED`                |
+| Refresh token expired                                         | 401  | `SESSION_EXPIRED`                |
+| Login yanlış email/parola                                     | 400  | `INVALID_CREDENTIALS`            |
+| Update-password yanlış eski parola                            | 400  | `INVALID_CREDENTIALS`            |
+| Bearer header yok / token bozuk                               | 400  | `UNAUTHORIZED` / `INVALID_TOKEN` |
+| Refresh token /authenticated-route'a gönderildi               | 400  | `INVALID_TOKEN_TYPE`             |
+| Access token /refresh'a gönderildi                            | 400  | `INVALID_TOKEN_TYPE`             |
+| Refresh token DB'de yok (rotated/logout)                      | 400  | `INVALID_TOKEN`                  |
+| Logout: token yok/bozuk/expired                               | 400  | `LOGOUT_FAILED`                  |
+| Delete-account başarılı (OWNER cascade / MANAGER soft-delete) | 200  | —                                |
+| OWNER-only endpoint'i MANAGER çağırdı                         | 403  | `FORBIDDEN`                      |
+| Subscription gate (EXPIRED/GRACE@0)                           | 403  | `SUBSCRIPTION_REQUIRED`          |
 
 ---
 

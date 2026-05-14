@@ -30,4 +30,9 @@ public interface TableRepository extends JpaRepository<Tables, UUID> {
         "SELECT COUNT(t) FROM Tables t WHERE t.venue.owner = :owner AND t.deletedAt IS NULL AND t.venue.deletedAt IS NULL"
     )
     long countByOwner(@org.springframework.data.repository.query.Param("owner") kg.sportmanager.entity.User owner);
+
+    /** Account-delete cascade: drop all tables in owner's venues. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("DELETE FROM Tables t WHERE t.venue.owner = :owner")
+    int deleteAllByVenueOwner(@org.springframework.data.repository.query.Param("owner") kg.sportmanager.entity.User owner);
 }
