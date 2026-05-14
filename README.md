@@ -1,303 +1,203 @@
 # Sport Manager Backend
 
-REST API backend для системы управления спортивными объектами. Реализует аутентификацию, авторизацию через JWT токены и управление пользователями с ролями `OWNER` и `MANAGER`.
+REST API для управления спортивными объектами (бильярд / снукер / pool-холлы).
+Java 21 / Spring Boot 4.0.6, PostgreSQL, JWT, Flyway, OpenAPI/Swagger.
+
+> Полный код-ревью текущего состояния — см. [review/](review/) (есть русская версия в [review/ru/](review/ru/)).
+> План работ — [review/PLAN.md](review/PLAN.md).
 
 ---
 
 ## Технологии
 
-- **Java 21+**
-- **Spring Boot 3**
-- **Spring Security**
-- **PostgreSQL**
-- **JWT (jjwt 0.11.5)**
-- **Hibernate / JPA**
-- **Lombok**
+- Java 21, Spring Boot 4.0.6
+- Spring Security + JWT (jjwt 0.11.5)
+- Spring Data JPA, PostgreSQL
+- Flyway (миграции схемы)
+- Spring AOP (subscription gate)
+- springdoc-openapi (Swagger UI)
+- Lombok
+- Bcrypt
 
 ---
 
-## Требования
-
-- Java 21+
-- PostgreSQL 14+
-- Maven 3.8+
-
----
-
-## Установка и запуск
-
-### 1. Клонировать репозиторий
+## Быстрый старт (Docker Compose)
 
 ```bash
-git clone https://github.com/Eldar2021/sport_manager_backend.git
-cd sport_manager_backend
+docker-compose up --build
 ```
 
-### 2. Создать базу данных
+- API: http://localhost:8080
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- Health: http://localhost:8080/actuator/health
 
-```sql
-CREATE DATABASE sport_manager;
-```
-
-### 3. Настроить `application.yml`
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/sport_manager
-    username: postgres
-    password: ВАШ_ПАРОЛЬ
-
-jwt:
-  secret: ВАШ_СЕКРЕТНЫЙ_КЛЮЧ_МИНИМУМ_256_БИТ
-  access-expiration: 900000       # 15 минут
-  refresh-expiration: 2592000000  # 30 дней
-```
-
-### 4. Запустить проект
-
-```bash
-mvn spring-boot:run
-```
-
-Сервер запустится на `http://localhost:8080`
+Postgres поднимется автоматически (port 5432), `JWT_SECRET` подставлен dev-значением.
 
 ---
 
-## Структура проекта
+## Запуск без Docker
+
+Требования: Java 21, Maven (через `./mvnw`), PostgreSQL 14+ с базой `sport_manager`.
+
+```bash
+# 1. Поднять Postgres локально (без SSL)
+createdb sport_manager
+
+# 2. Запустить с dev-профилем
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+---
+
+## Конфигурация (env vars)
+
+| Переменная | Значение по умолчанию | Описание |
+|-----------|----------------------|----------|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/sport_manager` | JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | `postgres` | |
+| `SPRING_DATASOURCE_PASSWORD` | `postgres` | |
+| `JWT_SECRET` | dev-default (не для прода!) | HMAC ключ для JWT |
+| `JWT_ACCESS_EXPIRATION` | `900000` (15 мин) | TTL access-токена в мс |
+| `JWT_REFRESH_EXPIRATION` | `2592000000` (30 дней) | TTL refresh-токена в мс |
+| `JPA_DDL_AUTO` | `validate` (prod) / `update` (dev) | Hibernate DDL |
+| `PORT` | `8080` | |
+| `HIKARI_MAX_POOL` | `10` | Connection pool max |
+| `PAYMENT_PROVIDER` | `MOCK` | `MOCK` или `FINIK` (FINIK пока не реализован) |
+
+В production secret обязательно подменять — иначе любой может выпустить токены.
+
+---
+
+## Структура пакетов
 
 ```
 kg.sportmanager/
-├── config/
-│   ├── SecurityConfiguration.java
-│   ├── JwtAuthFilter.java
-│   └── MessageConfig.java
-├── controller/
-│   └── AuthController.java
-├── service/
-│   ├── AuthService.java
-│   └── impl/
-│       └── AuthServiceImpl.java
-├── repository/
-│   ├── UserRepository.java
-│   └── InviteCodeRepository.java
-├── entity/
-│   ├── User.java
-│   └── InviteCode.java
+├── configuration/   # SecurityConfiguration, MessageConfiguration, SwaggerConfig, SubscriptionConfig
+├── controller/      # AuthController, HomePageController, SessionController, ReportsController,
+│                    # ManagerController, SubscriptionController
 ├── dto/
-│   ├── request/
-│   │   ├── LoginRequest.java
-│   │   ├── RegisterRequest.java
-│   │   ├── RefreshTokenRequest.java
-│   │   └── ForgotPasswordRequest.java
-│   └── response/
-│       ├── AuthResponse.java
-│       ├── UserResponse.java
-│       └── InviteCodeResponse.java
-└── util/
-    ├── JwtUtil.java
-    └── ErrorResponse.java
+│   ├── request/     # Login/Register/Refresh/Forgot, VenueRequest, TableRequest, Session*,
+│   │                # CheckoutRequest, ConfirmPaymentRequest
+│   └── response/    # AuthResponse, TokenPairResponse, UserResponse, ErrorResponse,
+│                    # VenueResponse, TableResponse, SessionLite/ResultResponse,
+│                    # ManagerResponse, Subscription*Response, PaymentResponse,
+│                    # reports/* (Overview, RevenuePoint, TableReportRow, ManagerReport*, Forecast)
+├── entity/          # User, InviteCode, Venue, Tables, Session, Subscription, Payment
+├── exception/       # AppException, GlobalExceptionHandler (read MessageSource)
+├── mapper/          # HomeMapper
+├── repository/      # UserRepository, InviteCodeRepository, VenueRepository, TableRepository,
+│                    # SessionRepository, ReportsRepository, SubscriptionRepository, PaymentRepository
+├── security/        # JwtUtil, JwtAuthFilter, JwtAuthEntryPoint, JwtAccessDeniedHandler,
+│                    # RequiresActiveSubscription, SubscriptionGate, RequestIdFilter
+├── service/
+│   └── impl/        # AuthServiceImpl, HomeServiceImpl, SessionServiceImpl, ReportsServiceImpl,
+│                    # ManagerServiceImpl, SubscriptionServiceImpl, SubscriptionStatusJob
+└── util/            # SessionMapper, CommonMapper
 ```
 
 ---
 
-## API Документация
+## API Endpoints
 
-**Base URL:** `http://localhost:8080`  
-**Content-Type:** `application/json`
+Все эндпоинты под префиксом `/api/v1/`.
 
-### Глобальные заголовки
+### Auth (public + invite-code требует OWNER)
+- `POST /api/v1/auth/login` — вход
+- `POST /api/v1/auth/register` — регистрация (OWNER без invite, MANAGER с invite)
+- `POST /api/v1/auth/refresh` — обновление токенов
+- `POST /api/v1/auth/logout` — выход (требует Bearer)
+- `POST /api/v1/auth/forgot-password` — **MVP: 503**, реализация в Phase 5+
+- `POST /api/v1/auth/invite-code` — OWNER-only, генерация invite
 
-| Header            | Описание                          | Пример            |
-|-------------------|-----------------------------------|-------------------|
-| `Accept-Language` | Язык ответа (`en` / `ru` / `ky`) | `ru`              |
-| `Authorization`   | Bearer токен (для protected)      | `Bearer eyJ...`   |
-| `os`              | Платформа клиента                 | `ios` / `android` |
-| `versionBuild`    | Номер сборки приложения           | `42`              |
+### Home (Venue + Table)
+- `GET /api/v1/venue/list`, `/selected`, `PATCH /selected` — OWNER+MANAGER
+- `POST /create`, `PUT /{id}`, `DELETE /{id}` venue/table — OWNER + active subscription
 
----
+### Session
+- `POST /api/v1/session/start`, `/pause`, `/resume`, `/finish`, `/cancel` — OWNER+MANAGER + active subscription
 
-### Auth Endpoints
+### Reports (OWNER-only)
+- `GET /api/v1/reports/venues`, `/overview`, `/revenue-series`, `/tables`, `/tables/{id}`,
+  `/managers`, `/managers/{id}`, `/forecast`
 
-#### `POST /auth/login`
-Вход в систему.
+### Managers (OWNER-only)
+- `GET /api/v1/managers` — список менеджеров OWNER-а
+- `DELETE /api/v1/managers/{id}` — soft-delete менеджера + active subscription
 
-**Request:**
-```json
-{
-  "username": "test@example.com",
-  "password": "Test1234"
-}
-```
+### Subscription (OWNER-only, MOCK режим)
+- `GET /api/v1/subscription` — детали + история платежей
+- `GET /api/v1/subscription/pricing` — цены + table count
+- `POST /api/v1/subscription/checkout` — создать платёж (PENDING)
+- `GET /api/v1/subscription/payment/{id}` — статус платежа
+- `POST /api/v1/subscription/payment/{id}/confirm` — **mock-only**, симуляция PAID/FAILED
 
-**Response 200:**
-```json
-{
-  "user": {
-    "id": "user-001",
-    "name": "Test Owner",
-    "role": "OWNER",
-    "email": "test@example.com",
-    "phone": "+996 700 000 001"
-  },
-  "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc..."
-}
-```
+> Реальная интеграция с Finik произойдёт после подписания договора. Пока работает `provider=MOCK`.
 
-| HTTP | Код ошибки            | Причина                  |
-|------|-----------------------|--------------------------|
-| 401  | `INVALID_CREDENTIALS` | Неверный логин или пароль |
-| 423  | `ACCOUNT_LOCKED`      | Аккаунт заблокирован     |
-
----
-
-#### `POST /auth/register`
-Регистрация нового пользователя.
-
-**Request (Owner):**
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "phone": "+996 700 000 003",
-  "password": "Test1234",
-  "role": "OWNER"
-}
-```
-
-**Request (Manager):**
-```json
-{
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "phone": "+996 700 000 004",
-  "password": "Test1234",
-  "role": "MANAGER",
-  "inviteCode": "INVITE-001"
-}
-```
-
-| HTTP | Код ошибки            | Причина                        |
-|------|-----------------------|--------------------------------|
-| 400  | `INVALID_INVITE_CODE` | Неверный или истёкший инвайт   |
-| 409  | `EMAIL_ALREADY_USED`  | Email уже зарегистрирован      |
-| 409  | `PHONE_ALREADY_USED`  | Телефон уже зарегистрирован    |
-
----
-
-#### `POST /auth/refresh`
-Обновление токенов.
-
-**Request:**
-```json
-{
-  "refreshToken": "eyJhbGc..."
-}
-```
-
-**Response 200:**
-```json
-{
-  "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc..."
-}
-```
-
-| HTTP | Причина                          |
-|------|----------------------------------|
-| 401  | Refresh token истёк или неверен  |
-
----
-
-#### `POST /auth/logout`
-Выход из системы. Требует `Authorization` заголовок.
-
-**Response:** `200 OK` (пустое тело)
-
----
-
-#### `POST /auth/forgot-password`
-Сброс пароля. Новый пароль отправляется на email.
-
-**Request:**
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Response:** `200 OK`
-
----
-
-#### `POST /auth/invite-code`
-Генерация инвайт-кода для регистрации Manager. Только для роли `OWNER`.
-
-**Response 200:**
-```json
-{
-  "code": "INVITE-A1B2C3D4",
-  "expiresAt": "2026-05-04T12:34:56"
-}
-```
-
-| HTTP | Причина               |
-|------|-----------------------|
-| 401  | Токен отсутствует     |
-| 403  | Нет роли OWNER        |
+### Health / Swagger (public)
+- `GET /actuator/health` — для k8s/docker probes
+- `GET /swagger-ui.html`
 
 ---
 
 ## Формат ошибок
 
-Все ошибки возвращаются в едином формате:
+Единый envelope для всех ошибок (включая auth):
 
 ```json
 {
-  "code": "INVALID_CREDENTIALS",
-  "message": {
-    "en": "Invalid username or password",
-    "ru": "Неверный логин или пароль",
-    "ky": "Логин же сырсөз туура эмес"
-  }
+  "code": "VENUE_NOT_FOUND",
+  "message": { "en": "...", "ru": "...", "ky": "..." },
+  "details": null
 }
 ```
 
----
+Validation:
 
-## Роли пользователей
-
-| Роль      | Описание                                        |
-|-----------|-------------------------------------------------|
-| `OWNER`   | Владелец. Может генерировать инвайт-коды        |
-| `MANAGER` | Менеджер. Регистрируется только по инвайт-коду  |
-
----
-
-## Поток обновления токенов
-
-```
-Клиент → запрос → 401
-         ↓
-POST /auth/refresh { refreshToken }
-   ├─ 200 → сохранить новые токены → повторить запрос
-   └─ 401 → очистить данные → экран входа
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": { "en": "Validation failed", ... },
+  "details": [
+    { "field": "email", "rule": "email", "message": "must be a well-formed email address" }
+  ]
+}
 ```
 
+Переводы — в `src/main/resources/messages*.properties`. Новый код ошибки → добавить во все три файла + бросить `AppException("CODE", HttpStatus.X)`.
+
 ---
 
-## Разработка
+## Тесты
 
-```bash
-# Сборка
-mvn clean install
+**Тесты MVP-намеренно отсутствуют** для скорости запуска. План на Phase 5: Testcontainers + integration tests. См. [review/08-config-build-review.md](review/08-config-build-review.md) и [review/PLAN.md](review/PLAN.md).
 
-# Запуск тестов
-mvn test
+---
 
-# Запуск с профилем dev
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
+## Subscription Gate
+
+Все write-эндпоинты (session start/pause/resume/finish/cancel, venue/table create/update/delete, invite-code, manager delete) проверяют активность подписки владельца через AOP-аспект `SubscriptionGate`. EXPIRED или GRACE@0 → 403 `SUBSCRIPTION_REQUIRED`.
+
+Новый OWNER при регистрации получает 14-дневный TRIAL автоматически.
+
+---
+
+## Migrations (Flyway)
+
+```
+src/main/resources/db/migration/
+  V1__initial_schema.sql           # baseline (users, invite_codes, venues, tables, sessions)
+  V2__user_owner_handle_lastseen_deleted.sql  # multi-tenant fields
+  V3__subscriptions_payments.sql   # subscription + payment + TRIAL backfill
 ```
 
+В проде: `ddl-auto=validate`, Hibernate только проверяет схему. Все DDL изменения — через новый `V*.sql`.
+
 ---
+
+## Документация и обзор
+
+- [docs/](docs/) — API контракты (turkish), для мобильной команды
+- [review/](review/) — полный код-ревью (turkish)
+- [review/ru/](review/ru/) — то же по-русски
+- [review/PLAN.md](review/PLAN.md) — план работ по фазам
+- [CLAUDE.md](CLAUDE.md) — заметки для AI-инструментов

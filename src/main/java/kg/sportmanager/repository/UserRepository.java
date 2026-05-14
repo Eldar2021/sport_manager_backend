@@ -2,8 +2,11 @@ package kg.sportmanager.repository;
 
 import kg.sportmanager.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,4 +19,18 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByRefreshToken(String refreshToken);
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
+    boolean existsByHandle(String handle);
+
+    /** Managers API: менеджеры владельца, без soft-deleted, отсортированы по lastSeenAt DESC NULLS LAST, name ASC. */
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.role = :role
+              AND u.owner = :owner
+              AND u.deletedAt IS NULL
+            ORDER BY u.lastSeenAt DESC NULLS LAST, u.name ASC
+            """)
+    List<User> findManagersByOwner(@Param("role") User.Role role, @Param("owner") User owner);
+
+    /** Reports/Managers: найти менеджера по id с проверкой принадлежности владельцу. */
+    Optional<User> findByIdAndOwnerAndDeletedAtIsNull(UUID id, User owner);
 }

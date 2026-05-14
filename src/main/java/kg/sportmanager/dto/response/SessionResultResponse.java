@@ -16,6 +16,9 @@ public class SessionResultResponse {
     private UUID id;
     private UUID tableId;
 
+    /** Кто стартовал сессию (для аудита/reports). */
+    private UUID managerId;
+
     /** COMPLETED | CANCELLED */
     private String status;
 

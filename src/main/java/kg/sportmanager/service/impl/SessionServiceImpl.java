@@ -11,6 +11,7 @@ import kg.sportmanager.entity.User;
 import kg.sportmanager.exception.AppException;
 import kg.sportmanager.repository.SessionRepository;
 import kg.sportmanager.repository.TableRepository;
+import kg.sportmanager.security.RequiresActiveSubscription;
 import kg.sportmanager.service.SessionService;
 import kg.sportmanager.util.SessionMapper;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@RequiresActiveSubscription
 public class SessionServiceImpl implements SessionService {
 
     /** Окно отмены для менеджера — 60 секунд. */
@@ -235,18 +237,15 @@ public class SessionServiceImpl implements SessionService {
     /**
      * Проверяет, что пользователь имеет доступ к столу.
      * Owner: стол должен принадлежать его заведению.
-     * Manager: аналогично (через owner заведения).
+     * Manager: стол должен принадлежать его owner-у (см. User.owner — Faz 1).
+     *
+     * ВНИМАНИЕ: пока User.owner не заполнен (Faz 1), Manager-ы блокируются полностью,
+     * чтобы закрыть cross-tenant утечку. После Faz 1 проверка будет: tableOwner == user.owner.
      */
     private void validateTableAccess(User user, Tables table) {
-        User owner = table.getVenue().getOwner();
-        boolean hasAccess = switch (user.getRole()) {
-            case OWNER -> owner.getId().equals(user.getId());
-            // Manager видит столы своего owner'а — здесь упрощённо:
-            // если у вас есть поле owner в User для manager — используйте его.
-            // Пока разрешаем доступ для любого MANAGER (доработайте под свою схему).
-            case MANAGER -> true;
-        };
-        if (!hasAccess) {
+        User tableOwner = table.getVenue().getOwner();
+        User userOwner = user.getRole() == User.Role.OWNER ? user : user.getOwner();
+        if (userOwner == null || !tableOwner.getId().equals(userOwner.getId())) {
             throw new AppException("FORBIDDEN", HttpStatus.FORBIDDEN);
         }
     }

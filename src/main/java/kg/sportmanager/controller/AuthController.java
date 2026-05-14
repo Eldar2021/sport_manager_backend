@@ -10,19 +10,19 @@ import kg.sportmanager.dto.request.RefreshTokenRequest;
 import kg.sportmanager.dto.request.RegisterRequest;
 import kg.sportmanager.dto.response.AuthResponse;
 import kg.sportmanager.dto.response.InviteCodeResponse;
+import kg.sportmanager.dto.response.TokenPairResponse;
 import kg.sportmanager.entity.User;
 import kg.sportmanager.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
+import jakarta.validation.Valid;
 
 @Slf4j
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 @Tag(name = "Auth", description = "Аутентификация и авторизация")
 public class AuthController {
@@ -33,8 +33,8 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Успешный вход, возвращает токены")
     @ApiResponse(responseCode = "401", description = "Неверные учётные данные")
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
-        log.info("Login request: {}", request);
+    public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
+        log.info("Login attempt for username={}", request.getUsername());
         return ResponseEntity.ok(authService.login(request));
     }
 
@@ -42,8 +42,8 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Успешная регистрация, возвращает токены")
     @ApiResponse(responseCode = "400", description = "Некорректные данные запроса")
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
-        log.info("Register request: {}", request);
+    public ResponseEntity<AuthResponse> register(@RequestBody @Valid RegisterRequest request) {
+        log.info("Register attempt for email={} role={}", request.getEmail(), request.getRole());
         return ResponseEntity.ok(authService.register(request));
     }
 
@@ -51,7 +51,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Новая пара токенов")
     @ApiResponse(responseCode = "401", description = "Refresh-токен недействителен или истёк")
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@RequestBody RefreshTokenRequest request) {
+    public ResponseEntity<TokenPairResponse> refresh(@RequestBody @Valid RefreshTokenRequest request) {
         return ResponseEntity.ok(authService.refresh(request));
     }
 
@@ -64,11 +64,14 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "Сброс пароля", description = "Отправляет новый пароль на email (TODO)")
-    @ApiResponse(responseCode = "200", description = "Письмо отправлено")
+    @Operation(summary = "Сброс пароля",
+            description = "MVP: возвращает 503 — email-флоу появится в Phase 5+ (Spring Mail).")
+    @ApiResponse(responseCode = "503", description = "Сервис временно недоступен")
     @PostMapping("/forgot-password")
-    public ResponseEntity<Void> forgotPassword(@RequestBody ForgotPasswordRequest request) {
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        throw new kg.sportmanager.exception.AppException(
+                "SERVICE_UNAVAILABLE",
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @Operation(summary = "Генерация инвайт-кода", description = "Только для пользователей с ролью OWNER")
@@ -77,9 +80,6 @@ public class AuthController {
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/invite-code")
     public ResponseEntity<InviteCodeResponse> inviteCode(@AuthenticationPrincipal User user) {
-        if (user.getRole() != User.Role.OWNER) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
         return ResponseEntity.ok(authService.generateInviteCode(user));
     }
 }

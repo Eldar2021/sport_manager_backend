@@ -46,6 +46,7 @@ public class HomeMapper {
         return SessionResponse.builder()
                 .id(session.getId().toString())
                 .tableId(session.getTable().getId().toString())
+                .managerId(session.getManager() != null ? session.getManager().getId().toString() : null)
                 .isActive(session.isActive())
                 .isPaused(session.isPaused())
                 .startedAt(session.getStartedAt().toString())
