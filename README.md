@@ -1,7 +1,7 @@
 # Sport Manager Backend
 
 REST API для управления спортивными объектами (бильярд / снукер / pool-холлы).
-Java 17 / Spring Boot 3.4 LTS, PostgreSQL, JWT, Flyway, OpenAPI/Swagger.
+Java 21 / Spring Boot 4.0.6, PostgreSQL, JWT, Flyway, OpenAPI/Swagger.
 
 > Полный код-ревью текущего состояния — см. [review/](review/) (есть русская версия в [review/ru/](review/ru/)).
 > План работ — [review/PLAN.md](review/PLAN.md).
@@ -10,7 +10,7 @@ Java 17 / Spring Boot 3.4 LTS, PostgreSQL, JWT, Flyway, OpenAPI/Swagger.
 
 ## Технологии
 
-- Java 17, Spring Boot 3.4.1
+- Java 21, Spring Boot 4.0.6
 - Spring Security + JWT (jjwt 0.11.5)
 - Spring Data JPA, PostgreSQL
 - Flyway (миграции схемы)
@@ -37,7 +37,7 @@ Postgres поднимется автоматически (port 5432), `JWT_SECRE
 
 ## Запуск без Docker
 
-Требования: Java 17, Maven (через `./mvnw`), PostgreSQL 14+ с базой `sport_manager`.
+Требования: Java 21, Maven (через `./mvnw`), PostgreSQL 14+ с базой `sport_manager`.
 
 ```bash
 # 1. Поднять Postgres локально (без SSL)
