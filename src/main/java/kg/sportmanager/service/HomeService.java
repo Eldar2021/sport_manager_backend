@@ -22,6 +22,9 @@ public interface HomeService {
 
     DeleteResponse deleteVenue(User user, String venueId);
 
+    /** {@code GET /api/v1/venue/{venueId}/tables} — bir mekanın tüm masaları (session'suz). */
+    List<TableListItemResponse> getVenueTables(User user, String venueId);
+
     TableResponse createTable(User user, TableRequest request);
 
     TableResponse updateTable(User user, String tableId, TableRequest request);

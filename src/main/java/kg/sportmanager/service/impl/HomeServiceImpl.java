@@ -168,6 +168,31 @@ public class HomeServiceImpl implements HomeService {
     }
 
 
+    /**
+     * Bir mekanın tüm aktif (soft-delete dışındaki) masaları, number ASC.
+     * OWNER kendi venue'leri, MANAGER bağlı olduğu owner'ın venue'leri için
+     * çağırır. Subscription gate yok (read endpoint). Boş mekan → {@code []}.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<kg.sportmanager.dto.response.TableListItemResponse> getVenueTables(User user, String venueId) {
+        User owner = resolveOwner(user);
+        if (owner == null) {
+            // Manager hasn't been linked to an owner yet — treat as not-found (avoid info-leak)
+            throw new AppException("VENUE_NOT_FOUND", HttpStatus.NOT_FOUND);
+        }
+        UUID id = parseUuid(venueId);
+        Venue venue = venueRepository.findByIdAndDeletedAtIsNull(id)
+                .filter(v -> v.getOwner().getId().equals(owner.getId()))
+                .orElseThrow(() -> new AppException("VENUE_NOT_FOUND", HttpStatus.NOT_FOUND));
+
+        return tableRepository.findByVenueAndDeletedAtIsNullOrderByNumberAsc(venue)
+                .stream()
+                .map(mapper::toTableListItem)
+                .toList();
+    }
+
+
     @Override
     @Transactional
     @RequiresActiveSubscription

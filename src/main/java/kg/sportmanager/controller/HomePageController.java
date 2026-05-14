@@ -85,6 +85,17 @@ public class HomePageController {
         return ResponseEntity.ok(homeService.deleteVenue(user, id));
     }
 
+    @Operation(summary = "Список столов мекена",
+            description = "Возвращает массив столов без session/snapshot. Пустой массив если нет столов.")
+    @ApiResponse(responseCode = "200", description = "Список столов (может быть пустым)")
+    @ApiResponse(responseCode = "404", description = "Мекен не найден или принадлежит другому owner-у")
+    @GetMapping("/venue/{venueId}/tables")
+    public ResponseEntity<List<TableListItemResponse>> getVenueTables(
+            @AuthenticationPrincipal User user,
+            @Parameter(description = "ID мекена") @PathVariable String venueId) {
+        return ResponseEntity.ok(homeService.getVenueTables(user, venueId));
+    }
+
     @Operation(summary = "Создать стол")
     @ApiResponse(responseCode = "201", description = "Стол успешно создан")
     @PostMapping("/table/create")
