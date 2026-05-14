@@ -1,6 +1,11 @@
 # API Endpoints — Mobile QA Sözleşmesi
 
-**Hedef kitle:** Mobil tester. Tüm 35 endpoint, request/response şekilleri, kullanılan hata kodları, gerekli header'lar tek dokümanda.
+**Hedef kitle:** Mobil tester. Tüm endpoint, request/response şekilleri, kullanılan hata kodları, gerekli header'lar tek dokümanda.
+
+> **Status code kuralı:** `401` döner **yalnız** access/refresh token expired ise (`code: SESSION_EXPIRED`).
+> Yanlış credentials, bozuk/revoke token, eksik header gibi diğer auth-fail durumları → **`400`** ile döner
+> (`INVALID_CREDENTIALS`, `INVALID_TOKEN`, `INVALID_TOKEN_TYPE`, `UNAUTHORIZED`, `LOGOUT_FAILED`).
+> Detay: [auth-api.md § Status code kuralı](auth-api.md#status-code-kuralı-401-yalnız-expired-için).
 
 **Base URL:** `http://localhost:8080` (local) — production'da `--dart-define=BASE_URL=...`  
 **Content-Type:** `application/json; charset=utf-8`  
@@ -118,7 +123,7 @@ Yeni OWNER kaydı → otomatik 14 günlük TRIAL oluşur.
 **Errors:**
 | HTTP | code |
 |------|------|
-| 401 | `INVALID_CREDENTIALS` |
+| 400 | `INVALID_CREDENTIALS` (yanlış email/parola — "Email or password is incorrect") |
 | 423 | `ACCOUNT_LOCKED` |
 | 422 | `VALIDATION_ERROR` |
 
@@ -188,16 +193,24 @@ Her refresh çağrısı yeni refresh token üretir (rotation). Eski refresh toke
 **Errors:**
 | HTTP | code |
 |------|------|
-| 401 | `SESSION_EXPIRED` |
+| 401 | `SESSION_EXPIRED` (yalnız refresh token expired ise) |
+| 400 | `INVALID_TOKEN` (bozuk / DB'de yok — rotated/logged out) |
+| 400 | `INVALID_TOKEN_TYPE` (access token /refresh'a gönderildi) |
+| 422 | `VALIDATION_ERROR` (boş `refreshToken`) |
 
 ---
 
-## 1.4 POST `/api/v1/auth/logout` — Authenticated
+## 1.4 POST `/api/v1/auth/logout` — Public (permitAll)
 
-**Request:** Body yok.  
-**Response:** `200 OK` (boş)
+**Request:** Body yok. Geçerli access token varsa header'da `Authorization: Bearer ...`.
+**Response:** `200 OK` (boş) — refresh token DB'de temizlenir.
 
-Refresh token sıfırlanır. Access token TTL sonuna kadar geçerli kalır.
+**Logout asla 401 döndürmez.** Token yok/bozuk/expired → **400 LOGOUT_FAILED**.
+
+**Errors:**
+| HTTP | code |
+|------|------|
+| 400 | `LOGOUT_FAILED` (token yok / bozuk / refresh-type / expired) |
 
 ---
 
@@ -233,6 +246,105 @@ Refresh token sıfırlanır. Access token TTL sonuna kadar geçerli kalır.
 |------|------|
 | 403 | `FORBIDDEN` (OWNER değilse) |
 | 403 | `SUBSCRIPTION_REQUIRED` |
+| 400 | `UNAUTHORIZED` / `INVALID_TOKEN` (token yok veya bozuk) |
+| 401 | `SESSION_EXPIRED` (access token expired) |
+
+---
+
+## 1.7 POST `/api/v1/auth/update-password` — Authenticated (Both roles)
+
+Authenticated kullanıcının parolasını günceller. Yeni token pair döner;
+eski refresh DB'de invalidate edilir (rotation).
+
+**Request:**
+
+```json
+{
+  "oldPassword": "OldPass12",
+  "newPassword": "NewPass99"
+}
+```
+
+`oldPassword` NotBlank. `newPassword` 8–100 char.
+
+**Response 200:**
+
+```json
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "eyJhbGc..."
+}
+```
+
+> `user` alanı dönmez (login/refresh ile aynı sözleşme).
+
+**Errors:**
+| HTTP | code |
+|------|------|
+| 400 | `INVALID_CREDENTIALS` (yanlış `oldPassword`) |
+| 400 | `UNAUTHORIZED` / `INVALID_TOKEN` (token yok / bozuk) |
+| 401 | `SESSION_EXPIRED` (access token expired) |
+| 422 | `VALIDATION_ERROR` (boş alan, kısa `newPassword`) |
+
+---
+
+# 1.5b Profile — `/api/v1/profile`
+
+Tam doc: [profile-api.md](profile-api.md).
+
+## 1.8 GET `/api/v1/profile` — Authenticated (Both roles)
+
+Mevcut kullanıcının profil özeti.
+
+**Response 200 — OWNER:**
+
+```json
+{
+  "user": {
+    "id": "5fb7e59c-...",
+    "name": "test",
+    "role": "OWNER",
+    "email": "test@gmail.com",
+    "phone": "+996 700 000 001"
+  },
+  "profileData": {
+    "venuesCount": 2,
+    "managersCount": 3,
+    "subscription": {
+      "status": "ACTIVE",
+      "endDate": "2026-05-15T10:30:00.000Z",
+      "daysUntilExpiry": 15,
+      "graceDaysRemaining": 0
+    }
+  }
+}
+```
+
+**Response 200 — MANAGER:**
+
+```json
+{
+  "user": {
+    "id": "...",
+    "name": "...",
+    "role": "MANAGER",
+    "email": "...",
+    "phone": "..."
+  },
+  "profileData": null
+}
+```
+
+`venuesCount` ve `managersCount` soft-delete'leri hariç tutar. Subscription
+status'u **anlık recompute** edilir (cron beklenmez). OWNER'ın hiç subscription
+kaydı yoksa `profileData.subscription = null`.
+
+**Errors:**
+| HTTP | code |
+|------|------|
+| 400 | `UNAUTHORIZED` (token yok) |
+| 400 | `INVALID_TOKEN` / `INVALID_TOKEN_TYPE` (bozuk veya yanlış tip) |
+| 401 | `SESSION_EXPIRED` (access token expired) |
 
 ---
 
@@ -1082,10 +1194,10 @@ K8s/Docker liveness/readiness probe için kullanılır.
 
 1. `POST /api/v1/auth/login` → `{user, accessToken, refreshToken}`
 2. Wait 15 dakika (access token expire) — opsiyonel test
-3. Authenticated endpoint → 401 SESSION_EXPIRED
+3. Authenticated endpoint → **401 SESSION_EXPIRED**
 4. `POST /api/v1/auth/refresh {refreshToken}` → `{accessToken, refreshToken}` (user YOK)
 5. Original request retry → 200 OK
-6. **Aynı eski refresh tekrar kullan** → 401 (rotation: token tek seferlik)
+6. **Aynı eski refresh tekrar kullan** → **400 INVALID_TOKEN** (rotation: token tek seferlik — 401 değil, çünkü token expire değil revoke)
 
 ## 8.5 Validation Errors
 
@@ -1099,15 +1211,15 @@ K8s/Docker liveness/readiness probe için kullanılır.
 
 40+ hata kodu, 3 dilde (`en`, `ru`, `ky`) `messages_*.properties`'te tanımlı.
 
-| Kategori         | Kodlar                                                                                                                                                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Auth**         | `INVALID_CREDENTIALS` (401), `INVALID_INVITE_CODE` (400), `EMAIL_ALREADY_USED` (409), `PHONE_ALREADY_USED` (409), `ACCOUNT_LOCKED` (423), `SESSION_EXPIRED` (401), `UNAUTHORIZED` (401), `INVALID_TOKEN_TYPE` (401) |
-| **Generic**      | `FORBIDDEN` (403), `VALIDATION_ERROR` (422), `BAD_REQUEST` (400), `INTERNAL_SERVER_ERROR` (500), `SERVICE_UNAVAILABLE` (503)                                                                                        |
-| **Venue/Table**  | `VENUE_NOT_FOUND` (404), `TABLE_NOT_FOUND` (404), `VENUE_NUMBER_TAKEN` (409), `TABLE_NUMBER_TAKEN` (409), `VENUE_HAS_TABLES` (409), `TABLE_HAS_ACTIVE_SESSION` (409)                                                |
-| **Session**      | `SESSION_NOT_FOUND` (404), `SESSION_NOT_ACTIVE` (409), `SESSION_NOT_PAUSED` (409), `SESSION_ALREADY_COMPLETED` (409), `SESSION_ALREADY_CANCELLED` (409), `CANCEL_WINDOW_EXPIRED` (422), `INVALID_DISCOUNT` (422)    |
-| **Reports**      | `REPORT_NOT_FOUND` (404), `MANAGER_NOT_FOUND` (404), `NOT_ENOUGH_DATA` (422)                                                                                                                                        |
-| **Managers**     | `HAS_ACTIVE_SESSION` (409)                                                                                                                                                                                          |
-| **Subscription** | `SUBSCRIPTION_REQUIRED` (403), `NO_TABLES` (422), `INVALID_DURATION` (422), `PAYMENT_NOT_FOUND` (404), `PAYMENT_ALREADY_PROCESSED` (409), `PAYMENT_PROVIDER_ERROR` (502), `PRICING_MISMATCH` (409)                  |
+| Kategori         | Kodlar                                                                                                                                                                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Auth**         | `INVALID_CREDENTIALS` (400), `INVALID_INVITE_CODE` (400), `EMAIL_ALREADY_USED` (409), `PHONE_ALREADY_USED` (409), `ACCOUNT_LOCKED` (423), `SESSION_EXPIRED` (401 — yalnız expired), `UNAUTHORIZED` (400), `INVALID_TOKEN` (400), `INVALID_TOKEN_TYPE` (400), `LOGOUT_FAILED` (400) |
+| **Generic**      | `FORBIDDEN` (403), `VALIDATION_ERROR` (422), `BAD_REQUEST` (400), `INTERNAL_SERVER_ERROR` (500), `SERVICE_UNAVAILABLE` (503)                                                                                                                                                       |
+| **Venue/Table**  | `VENUE_NOT_FOUND` (404), `TABLE_NOT_FOUND` (404), `VENUE_NUMBER_TAKEN` (409), `TABLE_NUMBER_TAKEN` (409), `VENUE_HAS_TABLES` (409), `TABLE_HAS_ACTIVE_SESSION` (409)                                                                                                               |
+| **Session**      | `SESSION_NOT_FOUND` (404), `SESSION_NOT_ACTIVE` (409), `SESSION_NOT_PAUSED` (409), `SESSION_ALREADY_COMPLETED` (409), `SESSION_ALREADY_CANCELLED` (409), `CANCEL_WINDOW_EXPIRED` (422), `INVALID_DISCOUNT` (422)                                                                   |
+| **Reports**      | `REPORT_NOT_FOUND` (404), `MANAGER_NOT_FOUND` (404), `NOT_ENOUGH_DATA` (422)                                                                                                                                                                                                       |
+| **Managers**     | `HAS_ACTIVE_SESSION` (409)                                                                                                                                                                                                                                                         |
+| **Subscription** | `SUBSCRIPTION_REQUIRED` (403), `NO_TABLES` (422), `INVALID_DURATION` (422), `PAYMENT_NOT_FOUND` (404), `PAYMENT_ALREADY_PROCESSED` (409), `PAYMENT_PROVIDER_ERROR` (502), `PRICING_MISMATCH` (409)                                                                                 |
 
 ---
 

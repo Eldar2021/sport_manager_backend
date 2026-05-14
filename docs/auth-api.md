@@ -5,6 +5,16 @@ Mobil istemcinin (`packages/auth`) backend'den beklediği auth uçları, request
 **Base URL:** `<BASE_URL>` (mobil tarafta `--dart-define=BASE_URL=...` ile geliyor)
 **Content-Type:** `application/json; charset=utf-8`
 
+> **Status code kuralı — 401 yalnız expired için.**
+> Backend'te `401` döner **yalnızca** access ya da refresh token **expired** olduğunda.
+> Diğer auth-fail durumlarının tamamı (`INVALID_CREDENTIALS`, `INVALID_TOKEN`,
+> `INVALID_TOKEN_TYPE`, `UNAUTHORIZED`, `LOGOUT_FAILED`) `400 Bad Request` döner.
+> Mobile refresh-akış'ı yalnızca `401 SESSION_EXPIRED` görürse refresh tetiklemelidir;
+> `400`'ler içinden yalnız `SESSION_EXPIRED` kodu refresh için anlamlıdır.
+
+> **İlişkili docs:** Login sonrası kullanıcı profil özeti için
+> [profile-api.md](profile-api.md) (yeni endpoint — `GET /api/v1/profile`).
+
 ## Global headers (her istekte)
 
 | Header            | Source                                                       | Example             | Required    |
@@ -55,12 +65,15 @@ Mobil istemcinin (`packages/auth`) backend'den beklediği auth uçları, request
 
 ### Errors
 
-| HTTP | `code`                | Trigger                    |
-| ---- | --------------------- | -------------------------- |
-| 401  | `INVALID_CREDENTIALS` | Yanlış username / password |
-| 423  | `ACCOUNT_LOCKED`      | Hesap kilitli              |
+| HTTP | `code`                | Trigger                                                                  |
+| ---- | --------------------- | ------------------------------------------------------------------------ |
+| 400  | `INVALID_CREDENTIALS` | Yanlış email/phone veya parola — mesaj: "Email or password is incorrect" |
+| 423  | `ACCOUNT_LOCKED`      | Hesap kilitli                                                            |
+| 422  | `VALIDATION_ERROR`    | Body field validation                                                    |
 
-> İstemci 401'i login üzerinde özel ele alır: refresh denemez, doğrudan logout / hata gösterir.
+> **Login `401` döndürmez.** 401 yalnız expired token için ayrılmıştır. Yanlış
+> credentials → 400 `INVALID_CREDENTIALS`. İstemci bu kodu özel ele alır: refresh
+> denemez, doğrudan kullanıcıya hata gösterir.
 
 ---
 
@@ -162,31 +175,53 @@ Login ile aynı: `{ user, accessToken, refreshToken }`.
 
 ### Errors
 
-| HTTP | Trigger                        | İstemci davranışı                               |
-| ---- | ------------------------------ | ----------------------------------------------- |
-| 401  | Refresh token geçersiz/expired | Local state temizlenir, login ekranına yönlenir |
+| HTTP | `code`               | Trigger                                                   | İstemci davranışı                   |
+| ---- | -------------------- | --------------------------------------------------------- | ----------------------------------- |
+| 401  | `SESSION_EXPIRED`    | Refresh token **expired**                                 | Local state temizle, login'e yönlen |
+| 400  | `INVALID_TOKEN`      | Token bozuk / imza geçersiz / DB'de yok (revoke/rotation) | Local state temizle, login'e yönlen |
+| 400  | `INVALID_TOKEN_TYPE` | Access token /refresh'a gönderildi                        | Local state temizle, login'e yönlen |
+| 422  | `VALIDATION_ERROR`   | Body field validation (boş `refreshToken`)                | Bug; production'da görünmemeli      |
 
-> Refresh sırasında 401 dönerse istemci **yeniden refresh denemez** — sadece logout tetiklenir.
+> **Sadece `401 SESSION_EXPIRED` "yeniden login gerek" sinyalidir.** 400'ler de
+> aynı sonucu doğurur (token tekrar kullanılamaz) — fark sadece tanılama içindir.
+> Hiçbir koşulda refresh **yeniden** refresh denemez.
 
 ---
 
 ## 4. POST `/api/v1/auth/logout`
 
-**Auth:** required (`Authorization: Bearer <accessToken>`)
+**Auth:** opsiyonel — endpoint `permitAll`'dır. Bearer geçerli access token
+ile gönderilirse backend kullanıcıyı tanır ve DB'deki `refreshToken` alanını
+temizler. Token yok / bozuk / expired ise backend `400 LOGOUT_FAILED` döner.
+
+> **Logout asla `401` döndürmez.** Success → `200`, başarısız → `400`. Bu
+> kural mobile'ın "logout sırasında 401 alırsam refresh denemeyeyim" akışını
+> sadeleştirir.
 
 ### Request body
 
 Boş (`{}` ya da hiç body).
 
-### 200 OK / 204 No Content
+### 200 OK
 
-Body beklenmiyor.
+Body yok. Backend `User.refreshToken = null` set eder (server-side revoke).
+
+### Errors
+
+| HTTP | `code`          | Trigger                                        |
+| ---- | --------------- | ---------------------------------------------- |
+| 400  | `LOGOUT_FAILED` | Token yok / bozuk / refresh-type / **expired** |
+
+> Expired access token bile logout'ta `400 LOGOUT_FAILED` döner — `401 SESSION_EXPIRED`
+> **değil**. Mobile zaten logout edildiği için tepki gereksiz.
 
 ### Notlar
 
-- İstemci local token'ı **önce** temizler, sonra remote'a istek atar; backend hatası swallow edilir.
-- Backend yine de refresh token'ı invalidate etmeli (server-side blacklist).
-- 401 dönerse istemci umursamaz — zaten logout ediliyor.
+- İstemci local token'ı **önce** temizler, sonra remote'a istek atar; backend
+  hatası (`400 LOGOUT_FAILED`) swallow edilir.
+- Server-side refresh token invalidation otomatik gerçekleşir (DB'de `null` set).
+- Access token JWT olduğu için kendi başına revoke edilemez; mobile local
+  silinmesine güvenir.
 
 ---
 
@@ -240,13 +275,63 @@ Boş.
 
 ### Errors
 
-| HTTP | `code`                  | Trigger                                                |
-| ---- | ----------------------- | ------------------------------------------------------ |
-| 401  | —                       | Token yok/expired                                      |
-| 403  | `FORBIDDEN`             | Owner değil                                            |
+| HTTP | `code`                  | Trigger                                               |
+| ---- | ----------------------- | ----------------------------------------------------- |
+| 400  | `UNAUTHORIZED`          | Token yok / bozuk                                     |
+| 401  | `SESSION_EXPIRED`       | Access token **expired**                              |
+| 403  | `FORBIDDEN`             | Owner değil                                           |
 | 403  | `SUBSCRIPTION_REQUIRED` | Owner aboneliği `EXPIRED` veya `GRACE@0` (yazma gate) |
 
 > `SUBSCRIPTION_REQUIRED` global gate kuralı için bkz. [subscription-api.md § Subscription gate](subscription-api.md#subscription-gate--diğer-endpointlere-etkisi).
+
+---
+
+## 7. POST `/api/v1/auth/update-password`
+
+**Auth:** required (`Authorization: Bearer <accessToken>`) — OWNER + MANAGER her ikisi.
+
+Authenticated kullanıcının parolasını günceller. Eski parolayı doğrular,
+yeniyi `bcrypt`'le hash'leyip kaydeder ve **yeni bir token pair** döndürür
+(rotation: önceki refresh token DB'de invalidate edilir).
+
+### Request body
+
+```json
+{
+  "oldPassword": "OldPass12",
+  "newPassword": "NewPass99"
+}
+```
+
+| Field         | Type   | Required | Rules                |
+| ------------- | ------ | :------: | -------------------- |
+| `oldPassword` | string |   yes    | NotBlank             |
+| `newPassword` | string |   yes    | NotBlank, 8–100 char |
+
+### 200 OK — response body
+
+```json
+{
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "eyJhbGc..."
+}
+```
+
+> `user` alanı dönmez (login/refresh response'larıyla aynı sözleşme).
+> Mobile yeni token pair'i sakler; eski refresh token artık geçersizdir.
+
+### Errors
+
+| HTTP | `code`                | Trigger                                  |
+| ---- | --------------------- | ---------------------------------------- |
+| 400  | `INVALID_CREDENTIALS` | `oldPassword` yanlış                     |
+| 400  | `UNAUTHORIZED`        | Token yok / bozuk                        |
+| 401  | `SESSION_EXPIRED`     | Access token **expired**                 |
+| 422  | `VALIDATION_ERROR`    | `newPassword < 8 char`, boş alanlar, vb. |
+
+> Bu endpoint genelde `forgot-password` ile birlikte kullanılır: kullanıcı email
+> üzerinden yeni şifre alır, onunla login olur, sonra `update-password` ile
+> kendi seçtiği şifreye geçer.
 
 ---
 
@@ -294,54 +379,83 @@ Boş.
 
 ## Error response formatı (öneri)
 
-Backend tüm hata yanıtlarını tutarlı bir zarfla göndermeli — istemci tarafında `AppException` / `AuthException` mapping kolay olsun:
+Backend tüm hata yanıtlarını tutarlı bir zarfla gönderir — istemci tarafında `AppException` / `AuthException` mapping kolay olsun:
 
 ```json
 {
   "code": "INVALID_CREDENTIALS",
   "message": {
-    "en": "Invalid username or password",
-    "ru": "Неверный логин или пароль",
-    "ky": "Логин же сырсөз туура эмес"
+    "en": "Email or password is incorrect",
+    "ru": "Email или пароль неверны",
+    "ky": "Email же сырсөз туура эмес"
   },
   "details": null
 }
 ```
 
-| Field     | Type                            | Notes                                                                                                  |
-| --------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `code`    | string (UPPER_SNAKE)            | İstemcide `AuthErrorCode` enum'una map edilir                                                          |
-| `message` | object `{en, ru, ky}` \| string | Tercihen üç dil; tek dilse `Accept-Language`'i kullanır                                                |
+| Field     | Type                            | Notes                                                                                                    |
+| --------- | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `code`    | string (UPPER_SNAKE)            | İstemcide `AuthErrorCode` enum'una map edilir                                                            |
+| `message` | object `{en, ru, ky}` \| string | Tercihen üç dil; tek dilse `Accept-Language`'i kullanır                                                  |
 | `details` | array \| null                   | Validation hatalarında `[{field, rule, message}]` dolar; diğer durumlarda `null` (bkz. home_page_api.md) |
 
 İstemcideki `AuthErrorCode` enum'una göre backend code map'i:
 
-| Backend `code`        | İstemci `AuthErrorCode` | Tipik HTTP         |
-| --------------------- | ----------------------- | ------------------ |
-| `INVALID_CREDENTIALS` | `invalidCredentials`    | 401                |
-| `INVALID_INVITE_CODE` | `invalidInviteCode`     | 400                |
-| `SESSION_EXPIRED`     | `sessionExpired`        | 401 (refresh path) |
-| `ACCOUNT_LOCKED`      | `accountLocked`         | 423                |
-| (anything else)       | `unknown`               | 4xx/5xx            |
+| Backend `code`        | İstemci `AuthErrorCode` | Tipik HTTP                                                            |
+| --------------------- | ----------------------- | --------------------------------------------------------------------- |
+| `INVALID_CREDENTIALS` | `invalidCredentials`    | **400** (yanlış email/parola)                                         |
+| `INVALID_INVITE_CODE` | `invalidInviteCode`     | 400                                                                   |
+| `INVALID_TOKEN`       | `unknown`               | 400 (bozuk / revoke edilmiş token)                                    |
+| `INVALID_TOKEN_TYPE`  | `unknown`               | 400 (yanlış tip — access /refresh'a, refresh / authenticated-route'a) |
+| `LOGOUT_FAILED`       | `unknown`               | 400 (logout sırasında token yok/bozuk/expired)                        |
+| `UNAUTHORIZED`        | `unknown`               | 400 (token yok)                                                       |
+| `SESSION_EXPIRED`     | `sessionExpired`        | **401** — _yalnızca_ expired access/refresh için                      |
+| `ACCOUNT_LOCKED`      | `accountLocked`         | 423                                                                   |
+| (anything else)       | `unknown`               | 4xx/5xx                                                               |
 
-> 401 = "session expired → login'e dön", 423 = "account locked banner". İkisi de istemcide `UnauthenticatedExceptionHandle` üzerinden globalde işleniyor.
+> **`401` ↔ expired token bire-bir eşleşmedir.** Yetki/forbidden için `403`,
+> diğer client hataları için `400`. Bu sayede mobile refresh akışı net: yalnız
+> `401 SESSION_EXPIRED` refresh tetikler, diğer 4xx kodları sessizce yutulur
+> ya da kullanıcıya gösterilir.
+
+---
+
+## Status code kuralı (401 yalnız expired için)
+
+Backend tüm auth-fail durumlarını aşağıdaki şekilde ayrıştırır:
+
+| Durum                                           | HTTP | `code`                           |
+| ----------------------------------------------- | ---- | -------------------------------- |
+| Access token expired                            | 401  | `SESSION_EXPIRED`                |
+| Refresh token expired                           | 401  | `SESSION_EXPIRED`                |
+| Login yanlış email/parola                       | 400  | `INVALID_CREDENTIALS`            |
+| Update-password yanlış eski parola              | 400  | `INVALID_CREDENTIALS`            |
+| Bearer header yok / token bozuk                 | 400  | `UNAUTHORIZED` / `INVALID_TOKEN` |
+| Refresh token /authenticated-route'a gönderildi | 400  | `INVALID_TOKEN_TYPE`             |
+| Access token /refresh'a gönderildi              | 400  | `INVALID_TOKEN_TYPE`             |
+| Refresh token DB'de yok (rotated/logout)        | 400  | `INVALID_TOKEN`                  |
+| Logout: token yok/bozuk/expired                 | 400  | `LOGOUT_FAILED`                  |
+| OWNER-only endpoint'i MANAGER çağırdı           | 403  | `FORBIDDEN`                      |
+| Subscription gate (EXPIRED/GRACE@0)             | 403  | `SUBSCRIPTION_REQUIRED`          |
 
 ---
 
 ## Refresh token flow (özet)
 
 ```
-İstemci → herhangi bir bearer endpoint → 401
+İstemci → herhangi bir bearer endpoint → 401 SESSION_EXPIRED
          ↓
 İstemci → POST /auth/refresh { refreshToken }
-   ├─ 200 → { accessToken, refreshToken } sakla, orijinal isteği yeni token'la tekrar et
-   └─ 401 → local state temizle, login'e yönlen (refresh DENENMEZ)
+   ├─ 200                  → { accessToken, refreshToken } sakla, orijinal isteği tekrar et
+   ├─ 401 SESSION_EXPIRED  → local state temizle, login'e yönlen (refresh DENENMEZ)
+   └─ 400 INVALID_TOKEN /
+         INVALID_TOKEN_TYPE → local state temizle, login'e yönlen (refresh DENENMEZ)
 ```
 
 Backend için kritik:
 
-- 401 sadece **gerçekten** access token expired/invalid olduğunda dönsün — yetki/forbidden için **403** kullanın. Aksi halde istemci refresh döngüsüne girer.
-- Refresh endpoint'i 401 dönerse istemci tek seferde durur (recursive refresh yok).
-- Refresh token rotation (her refresh'te yeni refresh) tavsiye edilir; istemci zaten yeni refresh token'ı saklıyor.
+- `401` **sadece** access/refresh token expired olduğunda. Bozuk/yanlış-tip/revoke → 400.
+- Refresh endpoint'i 401 ya da 400 dönerse istemci tek seferde durur (recursive refresh yok).
+- Refresh token rotation aktif: her refresh'te DB'deki `User.refreshToken` yenilenir; eski refresh artık geçersiz.
 
 ---
