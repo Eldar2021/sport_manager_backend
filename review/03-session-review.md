@@ -7,13 +7,13 @@ Kod: [SessionController](../src/main/java/kg/sportmanager/controller/SessionCont
 
 ## Endpoint Uyum Matrisi
 
-| Doc | Kod | Auth Doc | Kod | Response | Uyum |
-|-----|-----|----------|-----|----------|------|
-| `POST /api/v1/session/start` | aynı | Both | `validateTableAccess` ⚠️ | SessionLite | ⚠️ |
-| `POST /api/v1/session/{id}/pause` | aynı | Both | ⚠️ + idempotency bug | SessionLite | ⚠️ |
-| `POST /api/v1/session/{id}/resume` | aynı | Both | ⚠️ | SessionLite | ⚠️ |
-| `POST /api/v1/session/{id}/finish` | aynı | Both | ⚠️ | SessionResult | ⚠️ |
-| `POST /api/v1/session/{id}/cancel` | aynı | Both (60s gate) | ✅ window | SessionResult | ⚠️ |
+| Doc                                | Kod  | Auth Doc        | Kod                      | Response      | Uyum |
+| ---------------------------------- | ---- | --------------- | ------------------------ | ------------- | ---- |
+| `POST /api/v1/session/start`       | aynı | Both            | `validateTableAccess` ⚠️ | SessionLite   | ⚠️   |
+| `POST /api/v1/session/{id}/pause`  | aynı | Both            | ⚠️ + idempotency bug     | SessionLite   | ⚠️   |
+| `POST /api/v1/session/{id}/resume` | aynı | Both            | ⚠️                       | SessionLite   | ⚠️   |
+| `POST /api/v1/session/{id}/finish` | aynı | Both            | ⚠️                       | SessionResult | ⚠️   |
+| `POST /api/v1/session/{id}/cancel` | aynı | Both (60s gate) | ✅ window                | SessionResult | ⚠️   |
 
 `managerId` alanı DTO'larda eksik (aşağıda).
 
@@ -74,9 +74,11 @@ Check-then-act. Default isolation READ_COMMITTED. İki paralel `/start` aynı ma
 5. İki ACTIVE session aynı masada → tüm session lifecycle bozulur (pause hangisini paused yapacak?)
 
 Docs [session_api.md §1 Race condition](../docs/session_api.md#1-start-session):
+
 > Backend transaction içinde masayı lock'lar. İki paralel start denemesi gelirse biri başarılı olur, diğeri 409 alır.
 
 **Düzeltme A** — pessimistic lock:
+
 ```java
 @Lock(LockModeType.PESSIMISTIC_WRITE)
 @Query("SELECT t FROM Tables t WHERE t.id = :id AND t.deletedAt IS NULL")
@@ -84,6 +86,7 @@ Optional<Tables> findByIdForUpdate(@Param("id") UUID id);
 ```
 
 **Düzeltme B** — DB partial unique constraint:
+
 ```sql
 CREATE UNIQUE INDEX one_active_session_per_table ON sessions (table_id) WHERE is_active = true;
 ```
@@ -248,10 +251,12 @@ Doc: "Session PAUSED durumdaysa otomatik resume edilir, sonra finish." Code mate
 ### 12. Doc'taki `endedAt` field'ı `cancel`'de yanlış vakitte set ediliyor mu?
 
 [SessionServiceImpl.cancel:207](../src/main/java/kg/sportmanager/service/impl/SessionServiceImpl.java#L207): `session.setEndedAt(now)` ✓. Doc örneği:
+
 ```json
 "startedAt": "2026-04-27T18:42:00.000Z",
 "endedAt": "2026-04-27T18:42:30.000Z"
 ```
+
 OK. ✅
 
 ### 13. `pause`'da `setStatus(ACTIVE)` lüzumsuz

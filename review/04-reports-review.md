@@ -7,16 +7,16 @@ Kod: [ReportsController](../src/main/java/kg/sportmanager/controller/ReportsCont
 
 ## Endpoint Uyum Matrisi
 
-| Doc | Kod | OWNER-only | Query parametreleri | Uyum |
-|-----|-----|-----------|---------------------|------|
-| `GET /reports/venues` | ✓ | requireOwner ✓ | yok | ✅ |
-| `GET /reports/overview` | ✓ | ✓ | tümü | ⚠️ dead code |
-| `GET /reports/revenue-series` | ✓ | ✓ | `compare` parametresi accepted ama kullanılmıyor | ⚠️ |
-| `GET /reports/tables` | ✓ | ✓ | tümü | ⚠️ N+1 |
-| `GET /reports/tables/{id}` | ✓ | ✓ | tümü | ⚠️ venueId mismatch'i kontrol etmiyor |
-| `GET /reports/managers` | ✓ | ✓ | tümü, period kullanılmıyor | ⚠️ username = email |
-| `GET /reports/managers/{id}` | ✓ | ✓ | tümü | 🛑 **NPE bug** |
-| `GET /reports/forecast` | ✓ | ✓ | tümü | ⚠️ YEAR threshold yanlış |
+| Doc                           | Kod | OWNER-only     | Query parametreleri                              | Uyum                                  |
+| ----------------------------- | --- | -------------- | ------------------------------------------------ | ------------------------------------- |
+| `GET /reports/venues`         | ✓   | requireOwner ✓ | yok                                              | ✅                                    |
+| `GET /reports/overview`       | ✓   | ✓              | tümü                                             | ⚠️ dead code                          |
+| `GET /reports/revenue-series` | ✓   | ✓              | `compare` parametresi accepted ama kullanılmıyor | ⚠️                                    |
+| `GET /reports/tables`         | ✓   | ✓              | tümü                                             | ⚠️ N+1                                |
+| `GET /reports/tables/{id}`    | ✓   | ✓              | tümü                                             | ⚠️ venueId mismatch'i kontrol etmiyor |
+| `GET /reports/managers`       | ✓   | ✓              | tümü, period kullanılmıyor                       | ⚠️ username = email                   |
+| `GET /reports/managers/{id}`  | ✓   | ✓              | tümü                                             | 🛑 **NPE bug**                        |
+| `GET /reports/forecast`       | ✓   | ✓              | tümü                                             | ⚠️ YEAR threshold yanlış              |
 
 ---
 
@@ -36,6 +36,7 @@ Kod: [ReportsController](../src/main/java/kg/sportmanager/controller/ReportsCont
 **Reproduce:** Manager bir session cancel etti, owner `/reports/managers/{id}` çağırıyor → endpoint 500.
 
 Düzeltme:
+
 ```java
 .durationSeconds(s.getDurationSeconds() != null ? s.getDurationSeconds().longValue() : null)
 ```
@@ -134,12 +135,13 @@ s.manager.email AS username,
 Doc [managers-api.md](../docs/managers-api.md#modelsalan-referansı):
 
 ```ts
-username: string  // '@' olmadan; UI'da '@username' olarak gösterilir
+username: string; // '@' olmadan; UI'da '@username' olarak gösterilir
 ```
 
 `email` ≠ `username`. `@aibek` UI'da `@john@example.com` olarak görünür → çirkin. Backend'de `username` adında ayrı alan **yok** — `User` entity'de `username` field'ı tanımlanmamış. **Schema gap.**
 
 Düzeltme:
+
 1. `User` entity'sine `@Column(unique=true) String username;`
 2. Register sırasında doldur (kullanıcıdan al veya email local part'ından üret).
 3. Projection'u `s.manager.username AS username` olarak değiştir.
@@ -171,7 +173,7 @@ for (Tables t : tables) {
 
 ```java
 @Query("""
-    SELECT s.table.id, 
+    SELECT s.table.id,
            COALESCE(SUM(CASE WHEN s.status='COMPLETED' THEN s.totalAmount ELSE 0 END), 0),
            COUNT(CASE WHEN s.status='COMPLETED' THEN 1 END)
     FROM Session s
@@ -281,6 +283,7 @@ Aynı pattern başka projection'larda gerekebilir.
 ### 15. Heatmap UTC, doc'ta venue local time TBD
 
 Doc [reports-api.md §5](../docs/reports-api.md#5-get-apiv1reportstablesid):
+
 > Hour ordering: ... (yerel saatte; venue zone gerekirse v2'de).
 
 Kod UTC kullanıyor. Bişkek için UTC+6 → akşam 18:00 saatleri öğlen 12:00 olarak görünür. **Owner yanlış peak hours çıkarır.** v2'de `Venue.timezone` ekle.
@@ -298,12 +301,14 @@ Tables.number `Integer` (boxed). DTO field primitive. Auto-unbox null değeri ya
 ### 17. `OverviewResponse.KpiBlock.previous` her zaman null ama field var
 
 Recursive yapı önlemek için her zaman null set ediliyor. OK ama JSON output'unda `"previous": null` görünür → mobil parse OK. Doc:
+
 ```json
 "previous": {
   ...,
   "previous": null
 }
 ```
+
 Doc bunu açıkça gösteriyor. ✅
 
 ### 18. `OverviewResponse` `@JsonInclude(ALWAYS)` ile null'lar atılmıyor

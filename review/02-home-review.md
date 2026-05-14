@@ -7,17 +7,17 @@ Kod: [HomePageController](../src/main/java/kg/sportmanager/controller/HomePageCo
 
 ## Endpoint Uyum Matrisi
 
-| Doc | Kod | Auth Doc | Kod | Body | Uyum |
-|-----|-----|----------|-----|------|------|
-| `GET /api/v1/venue/list` | `GET /api/v1/venue/list` | Owner+Manager | resolveOwner kırık | ✅ format | ⚠️ Manager için boş |
-| `GET /api/v1/venue/selected` | aynı | Both | aynı sorun | ✅ format | ⚠️ Manager için 404 |
-| `PATCH /api/v1/venue/selected` | aynı | Both | aynı sorun | ✅ format | ⚠️ Manager için 404 |
-| `POST /api/v1/venue/create` | aynı | OWNER | `requireOwner` ✅ | ✅ | ✅ |
-| `PUT /api/v1/venue/{id}` | aynı | OWNER | `requireOwner` ✅ | ✅ | ✅ |
-| `DELETE /api/v1/venue/{id}` | aynı | OWNER | ✅ | DeleteResponse | ✅ |
-| `POST /api/v1/table/create` | aynı | OWNER | ✅ | ✅ | ✅ |
-| `PUT /api/v1/table/{id}` | aynı | OWNER | ✅ | ✅ | ✅ |
-| `DELETE /api/v1/table/{id}` | aynı | OWNER | ✅ | DeleteResponse | ✅ |
+| Doc                            | Kod                      | Auth Doc      | Kod                | Body           | Uyum                |
+| ------------------------------ | ------------------------ | ------------- | ------------------ | -------------- | ------------------- |
+| `GET /api/v1/venue/list`       | `GET /api/v1/venue/list` | Owner+Manager | resolveOwner kırık | ✅ format      | ⚠️ Manager için boş |
+| `GET /api/v1/venue/selected`   | aynı                     | Both          | aynı sorun         | ✅ format      | ⚠️ Manager için 404 |
+| `PATCH /api/v1/venue/selected` | aynı                     | Both          | aynı sorun         | ✅ format      | ⚠️ Manager için 404 |
+| `POST /api/v1/venue/create`    | aynı                     | OWNER         | `requireOwner` ✅  | ✅             | ✅                  |
+| `PUT /api/v1/venue/{id}`       | aynı                     | OWNER         | `requireOwner` ✅  | ✅             | ✅                  |
+| `DELETE /api/v1/venue/{id}`    | aynı                     | OWNER         | ✅                 | DeleteResponse | ✅                  |
+| `POST /api/v1/table/create`    | aynı                     | OWNER         | ✅                 | ✅             | ✅                  |
+| `PUT /api/v1/table/{id}`       | aynı                     | OWNER         | ✅                 | ✅             | ✅                  |
+| `DELETE /api/v1/table/{id}`    | aynı                     | OWNER         | ✅                 | DeleteResponse | ✅                  |
 
 Yol prefix'i doğru (`/api/v1/...`). Auth roller doğru taraflarda yönlendirilmiş. **Asıl sorun:** manager rolünde resolve mantığı kırık.
 
@@ -44,6 +44,7 @@ Junior dev kendisi de açıkça yazmış: "Şu an user'ı kendini döndürüyor"
 - `PATCH /venue/selected` → manager kendi venue ID'sini geçemiyor (owner'a ait), `VENUE_NOT_FOUND`.
 
 Doc [home_page_api.md §1 Notes](../docs/home_page_api.md):
+
 > Manager için: bağlı olduğu owner'ın tüm mekanları.
 
 **Çözüm yolu** (auth gap'i ile birlikte):
@@ -143,6 +144,7 @@ Aynı sorun `venues.number` için de var (owner içinde unique).
 ### 7. Delete venue: cascade soft-delete vs `VENUE_HAS_TABLES`
 
 Docs çelişkili:
+
 > | `VENUE_HAS_TABLES` | 409 | Mekanın içinde masalar var, önce onları sil |  
 > Silinen mekanın masaları da soft delete edilir (cascade).
 
@@ -159,6 +161,7 @@ Code [HomeServiceImpl.deleteVenue:131-156](../src/main/java/kg/sportmanager/serv
 ### 9. Doc'taki "Detail" alanı eksik
 
 Docs:
+
 ```json
 {
   "code": "VALIDATION_ERROR",
@@ -198,9 +201,11 @@ Doc: 1-100. Kod: `isBlank()` → boşsa ret, `length > 100` → fazlaysa ret. `l
 ### 14. Currency enum'da `KGZ` typo riski yok
 
 [Tables.java:68-70](../src/main/java/kg/sportmanager/entity/Tables.java#L68-L70):
+
 ```java
 public enum Currency { KGS, USD, RUB, KZT, TRY }
 ```
+
 Doc'la birebir aynı. ✅
 
 `TRY` Java keyword değil (lower-case `try` keyword), enum constant olarak kullanılabilir. OK.
@@ -212,6 +217,7 @@ Doc'la birebir aynı. ✅
 ### 16. `Venue.selected` boolean primitive
 
 [Venue.java:41](../src/main/java/kg/sportmanager/entity/Venue.java#L41):
+
 ```java
 @Column(nullable = false)
 private boolean selected = false;

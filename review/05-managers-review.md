@@ -9,10 +9,10 @@ Kod: **yok**
 
 Doc tanımlı endpoint'ler:
 
-| Method | Path | Doc | Implementasyon |
-|--------|------|-----|----------------|
-| `GET` | `/api/v1/managers` | OWNER bağlı manager listesi | ❌ Hiç yok |
-| `DELETE` | `/api/v1/managers/{id}` | Manager'ı takımdan çıkar | ❌ Hiç yok |
+| Method   | Path                    | Doc                         | Implementasyon |
+| -------- | ----------------------- | --------------------------- | -------------- |
+| `GET`    | `/api/v1/managers`      | OWNER bağlı manager listesi | ❌ Hiç yok     |
+| `DELETE` | `/api/v1/managers/{id}` | Manager'ı takımdan çıkar    | ❌ Hiç yok     |
 
 Bağımlı doc bileşenleri:
 
@@ -62,7 +62,7 @@ public void delete(User owner, UUID managerId) {
         .filter(m -> m.getRole() == Role.MANAGER)
         .filter(m -> m.getOwner() != null && m.getOwner().getId().equals(owner.getId()))
         .orElseThrow(() -> new AppException("MANAGER_NOT_FOUND", NOT_FOUND));
-    
+
     if (sessionRepository.existsByManagerAndIsActiveTrue(manager)) {
         throw new AppException("HAS_ACTIVE_SESSION", CONFLICT);  // opsiyonel
     }
@@ -139,6 +139,7 @@ Her istek için bir UPDATE pahalı. 5dk throttle uygula. Veya async (event publi
 ### Adım 6 — Subscription gate ile hookla
 
 Managers silme: read-only mu kabul edilir? Doc tablosu (subscription-api.md):
+
 > | Manager invite | 403 SUBSCRIPTION_REQUIRED |
 
 Silme tablosu yok ama "yazma" kategorisinde sayılırsa gate uygulanır. Karar konuşulmalı.

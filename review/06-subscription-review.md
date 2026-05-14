@@ -9,13 +9,13 @@ Kod: **yok** (entity, controller, service, repository, DTO, scheduled job — hi
 
 Doc'taki tüm subscription endpoint'leri:
 
-| Method | Path | Doc | Implementasyon |
-|--------|------|-----|----------------|
-| `GET` | `/api/v1/subscription` | Subscription özeti + payment history | ❌ |
-| `GET` | `/api/v1/subscription/pricing` | Fiyatlandırma config + tableCount | ❌ |
-| `POST` | `/api/v1/subscription/checkout` | Payment kaydı oluştur (PENDING) | ❌ |
-| `GET` | `/api/v1/subscription/payment/{id}` | Payment status polling | ❌ |
-| `POST` | `/api/v1/subscription/payment/{id}/confirm` | Mock-mode payment confirmation | ❌ |
+| Method | Path                                        | Doc                                  | Implementasyon |
+| ------ | ------------------------------------------- | ------------------------------------ | -------------- |
+| `GET`  | `/api/v1/subscription`                      | Subscription özeti + payment history | ❌             |
+| `GET`  | `/api/v1/subscription/pricing`              | Fiyatlandırma config + tableCount    | ❌             |
+| `POST` | `/api/v1/subscription/checkout`             | Payment kaydı oluştur (PENDING)      | ❌             |
+| `GET`  | `/api/v1/subscription/payment/{id}`         | Payment status polling               | ❌             |
+| `POST` | `/api/v1/subscription/payment/{id}/confirm` | Mock-mode payment confirmation       | ❌             |
 
 Bağımlı entity'ler (yok):
 
@@ -38,11 +38,11 @@ Eksik gate mekanizması:
 
 Doc [subscription-api.md §Subscription gate](../docs/subscription-api.md#subscription-gate--diğer-endpointlere-etkisi):
 
-| Endpoint kategorisi | EXPIRED owner için |
-|---------------------|---------------------|
+| Endpoint kategorisi                   | EXPIRED owner için          |
+| ------------------------------------- | --------------------------- |
 | Session: start, pause, resume, finish | 403 `SUBSCRIPTION_REQUIRED` |
-| Venue/table: create, update, delete | 403 `SUBSCRIPTION_REQUIRED` |
-| Auth: invite-code | 403 `SUBSCRIPTION_REQUIRED` |
+| Venue/table: create, update, delete   | 403 `SUBSCRIPTION_REQUIRED` |
+| Auth: invite-code                     | 403 `SUBSCRIPTION_REQUIRED` |
 
 **Şu an hiçbir yerde uygulanmıyor.** EXPIRED owner sistemi sınırsız kullanabilir.
 
@@ -53,7 +53,7 @@ Doc [subscription-api.md §Subscription gate](../docs/subscription-api.md#subscr
 @RequiredArgsConstructor
 public class SubscriptionGuardAspect {
     private final SubscriptionService subscriptionService;
-    
+
     @Before("@annotation(RequiresActiveSubscription)")
     public void check(JoinPoint jp) {
         User user = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -93,7 +93,7 @@ public class Subscription {
     Instant gracePeriodEndsAt;                   // nullable
     @CreationTimestamp Instant createdAt;
     @UpdateTimestamp Instant updatedAt;
-    
+
     public enum Status { ACTIVE, GRACE, EXPIRED }
     public enum Source { TRIAL, PAID }
 }
@@ -115,7 +115,7 @@ public class Payment {
     Instant paidAt;
     Instant failedAt;
     String failureReason;
-    
+
     public enum PaymentStatus { PENDING, PAID, FAILED }
     public enum Provider { MOCK, FINIK }
 }
@@ -165,6 +165,7 @@ subscription:
 ### Adım 5 — Register'da TRIAL oluştur
 
 Doc [§ Yan etkiler](../docs/subscription-api.md#yan-etkiler--diğer-endpointlere-eklenmesi-gerekenler):
+
 > 2. Register endpoint (`POST /auth/register`, role=OWNER) → başarılı kayıttan **hemen sonra** backend `Subscription { status: ACTIVE, source: TRIAL, startDate: now, endDate: now + freeTrialDays }` oluşturmalı.
 
 [AuthServiceImpl.register](../src/main/java/kg/sportmanager/service/impl/AuthServiceImpl.java#L51-L83)'a OWNER için TRIAL subscription yaratma adımı ekle.
@@ -175,7 +176,7 @@ Doc [§ Yan etkiler](../docs/subscription-api.md#yan-etkiler--diğer-endpointler
 @Component @RequiredArgsConstructor
 public class SubscriptionStatusJob {
     private final SubscriptionRepository repo;
-    
+
     @Scheduled(cron = "0 0 0 * * *", zone = "UTC")
     public void transition() {
         Instant now = Instant.now();
@@ -186,7 +187,7 @@ public class SubscriptionStatusJob {
                 s.setGracePeriodEndsAt(s.getEndDate().plus(graceDays, DAYS));
                 repo.save(s);
             });
-        
+
         repo.findByStatus(Status.GRACE)
             .stream().filter(s -> s.getGracePeriodEndsAt().isBefore(now))
             .forEach(s -> s.setStatus(Status.EXPIRED));
@@ -203,6 +204,7 @@ public class SubscriptionStatusJob {
 ### Adım 8 — Profile entegrasyonu
 
 Doc:
+
 > Profile endpoint → response'a `subscription: { status, endDate, daysUntilExpiry, graceDaysRemaining }` eklenmeli.
 
 `/profile` veya `/me` endpoint'i mevcut değil — auth response'larında User dönmüyor pure profile için. Ayrıca eklenmeli (subscription dışında da gerekli).
@@ -250,19 +252,19 @@ Flyway script olmadan bu manuel SQL çalıştırılması gerek.
 
 ## Effort Tahmini
 
-| Görev | Süre |
-|-------|------|
-| Entity'ler + repository | 2 saat |
-| Service iskeleti + computation logic | 4 saat |
-| 5 endpoint + DTO'lar | 4 saat |
-| Subscription gate (AOP veya interceptor) | 3 saat |
-| Register TRIAL hook | 1 saat |
-| Daily cron job | 2 saat |
-| MESSAGES güncellemesi + test edilebilir hata akışı | 1 saat |
-| Mock confirm endpoint + production disable | 1 saat |
-| Test (unit + integration) | 4 saat |
-| Mevcut OWNER'lar için backfill SQL | 1 saat |
-| **Toplam** | **~3 gün** |
+| Görev                                              | Süre       |
+| -------------------------------------------------- | ---------- |
+| Entity'ler + repository                            | 2 saat     |
+| Service iskeleti + computation logic               | 4 saat     |
+| 5 endpoint + DTO'lar                               | 4 saat     |
+| Subscription gate (AOP veya interceptor)           | 3 saat     |
+| Register TRIAL hook                                | 1 saat     |
+| Daily cron job                                     | 2 saat     |
+| MESSAGES güncellemesi + test edilebilir hata akışı | 1 saat     |
+| Mock confirm endpoint + production disable         | 1 saat     |
+| Test (unit + integration)                          | 4 saat     |
+| Mevcut OWNER'lar için backfill SQL                 | 1 saat     |
+| **Toplam**                                         | **~3 gün** |
 
 Finik gerçek entegrasyonu hariç. Finik dokümantasyonu geldiğinde +2-3 gün.
 

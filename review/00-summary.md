@@ -8,16 +8,16 @@ Scope: `develop` branch'inin mevcut durumu vs `docs/*.md` sözleşmeleri
 
 ## Skor
 
-| Alan | Puan | Yorum |
-|------|------|-------|
-| Auth | 5/10 | Endpoint'ler var ama tutarsız hata zarfı, `/api/v1` prefix yok, forgot-password sahte |
-| Home (Venue/Table) | 6/10 | Çoğunlukla çalışıyor; manager→owner ilişkisi tamamen kırık |
-| Session | 5/10 | Doğru iş mantığı ama **2 kritik güvenlik açığı**: manager cross-tenant erişim + race condition |
-| Reports | 4/10 | Endpoint'ler var ama **NPE bug'ı**, N+1 sorgular, cross-owner manager leak |
-| Managers API | 0/10 | **Hiç implement edilmemiş** |
-| Subscription API | 0/10 | **Hiç implement edilmemiş**, gate hiçbir yerde uygulanmıyor |
-| Security & i18n | 4/10 | JWT çalışıyor; secret commit'lenmiş, parolalar log'a yazılıyor, çeviri çoğu hata kodu için yok |
-| Config & Build | 3/10 | Hardcoded secret, env-var yok, Flyway yok, **hiç test yok**, ddl-auto=update |
+| Alan               | Puan | Yorum                                                                                          |
+| ------------------ | ---- | ---------------------------------------------------------------------------------------------- |
+| Auth               | 5/10 | Endpoint'ler var ama tutarsız hata zarfı, `/api/v1` prefix yok, forgot-password sahte          |
+| Home (Venue/Table) | 6/10 | Çoğunlukla çalışıyor; manager→owner ilişkisi tamamen kırık                                     |
+| Session            | 5/10 | Doğru iş mantığı ama **2 kritik güvenlik açığı**: manager cross-tenant erişim + race condition |
+| Reports            | 4/10 | Endpoint'ler var ama **NPE bug'ı**, N+1 sorgular, cross-owner manager leak                     |
+| Managers API       | 0/10 | **Hiç implement edilmemiş**                                                                    |
+| Subscription API   | 0/10 | **Hiç implement edilmemiş**, gate hiçbir yerde uygulanmıyor                                    |
+| Security & i18n    | 4/10 | JWT çalışıyor; secret commit'lenmiş, parolalar log'a yazılıyor, çeviri çoğu hata kodu için yok |
+| Config & Build     | 3/10 | Hardcoded secret, env-var yok, Flyway yok, **hiç test yok**, ddl-auto=update                   |
 
 **Toplam:** Bu kod junior-dev seviyesinde, "mutlu yol"da çalışan ama production'a hazır olmayan bir backend. **Mobil istemci docs'tan implementasyona geçmeye çalışırsa kırılır** (path prefix uyumsuzluğu + 2 eksik API + hata zarfı tutarsızlığı).
 
@@ -55,16 +55,16 @@ Scope: `develop` branch'inin mevcut durumu vs `docs/*.md` sözleşmeleri
 
 ### Doc–Code Uyumsuzlukları
 
-| Konu | Doc | Kod | Etki |
-|------|-----|-----|------|
-| Auth path prefix | `/api/v1/auth/**` | `/auth/**` | Mobil 404 |
-| Refresh response | Sadece tokenlar | `{user, accessToken, refreshToken}` | Doc ihlali; kritik değil |
-| `details` field error body | `null` veya array | Tamamen yok (ErrorResponse'da field yok) | Validation hataları parse edilemez |
-| Validation `details: [{field, rule, message}]` | Var | Yok — hep `VALIDATION_ERROR` | Mobil hangi alan yanlış göremiyor |
-| `Accept-Language` davranışı | Yorum: header set'liyse tek dil dön | Her zaman 3 dil | Doc'ta opsiyonel — kritik değil |
-| Currency `KGS\|USD\|RUB\|KZT\|TRY` | 5 değer | Aynı 5 değer enum'da | OK |
-| `tarifAmountSnapshot` integer | integer | `Integer` | OK |
-| Session `managerId` | uuid | `UUID` (entity'de var) | OK ama response DTO'larında alan eksik (bkz. 03) |
+| Konu                                           | Doc                                 | Kod                                      | Etki                                             |
+| ---------------------------------------------- | ----------------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| Auth path prefix                               | `/api/v1/auth/**`                   | `/auth/**`                               | Mobil 404                                        |
+| Refresh response                               | Sadece tokenlar                     | `{user, accessToken, refreshToken}`      | Doc ihlali; kritik değil                         |
+| `details` field error body                     | `null` veya array                   | Tamamen yok (ErrorResponse'da field yok) | Validation hataları parse edilemez               |
+| Validation `details: [{field, rule, message}]` | Var                                 | Yok — hep `VALIDATION_ERROR`             | Mobil hangi alan yanlış göremiyor                |
+| `Accept-Language` davranışı                    | Yorum: header set'liyse tek dil dön | Her zaman 3 dil                          | Doc'ta opsiyonel — kritik değil                  |
+| Currency `KGS\|USD\|RUB\|KZT\|TRY`             | 5 değer                             | Aynı 5 değer enum'da                     | OK                                               |
+| `tarifAmountSnapshot` integer                  | integer                             | `Integer`                                | OK                                               |
+| Session `managerId`                            | uuid                                | `UUID` (entity'de var)                   | OK ama response DTO'larında alan eksik (bkz. 03) |
 
 ### Validation Eksikliği
 
@@ -104,13 +104,13 @@ Hiçbir DTO'da Jakarta validation annotation'ı yok (`@NotBlank`, `@Size`, `@Min
 
 ## Bireysel Review Dosyaları
 
-| Dosya | Kapsam |
-|-------|--------|
-| [01-auth-review.md](01-auth-review.md) | `/auth/*` endpoint'leri, JWT akışı, invite code |
-| [02-home-review.md](02-home-review.md) | Venue + Table CRUD, manager→owner gap |
-| [03-session-review.md](03-session-review.md) | Session lifecycle, snapshot, hesaplama, **güvenlik delikleri** |
-| [04-reports-review.md](04-reports-review.md) | 8 reports endpoint'i, NPE, bucketing, forecast |
-| [05-managers-review.md](05-managers-review.md) | (Implementasyon yok — gap dökümü + roadmap) |
-| [06-subscription-review.md](06-subscription-review.md) | (Implementasyon yok — gap dökümü + roadmap) |
-| [07-security-error-handling-review.md](07-security-error-handling-review.md) | JWT detayları, hata zarfı, i18n, EntryPoint, AccessDenied |
-| [08-config-build-review.md](08-config-build-review.md) | pom.xml, application.yml, Dockerfile, build/test eksiklikleri |
+| Dosya                                                                        | Kapsam                                                         |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [01-auth-review.md](01-auth-review.md)                                       | `/auth/*` endpoint'leri, JWT akışı, invite code                |
+| [02-home-review.md](02-home-review.md)                                       | Venue + Table CRUD, manager→owner gap                          |
+| [03-session-review.md](03-session-review.md)                                 | Session lifecycle, snapshot, hesaplama, **güvenlik delikleri** |
+| [04-reports-review.md](04-reports-review.md)                                 | 8 reports endpoint'i, NPE, bucketing, forecast                 |
+| [05-managers-review.md](05-managers-review.md)                               | (Implementasyon yok — gap dökümü + roadmap)                    |
+| [06-subscription-review.md](06-subscription-review.md)                       | (Implementasyon yok — gap dökümü + roadmap)                    |
+| [07-security-error-handling-review.md](07-security-error-handling-review.md) | JWT detayları, hata zarfı, i18n, EntryPoint, AccessDenied      |
+| [08-config-build-review.md](08-config-build-review.md)                       | pom.xml, application.yml, Dockerfile, build/test eksiklikleri  |

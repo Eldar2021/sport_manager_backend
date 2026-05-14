@@ -9,16 +9,28 @@ Kod: [SecurityConfiguration](../src/main/java/kg/sportmanager/configuration/Secu
 ### 1. Hata zarfı iki ayrı formatta dönüyor
 
 **Format A (AuthServiceImpl):** Spring default `ResponseStatusException` body:
+
 ```json
-{ "timestamp": "...", "status": 401, "error": "Unauthorized", "message": "INVALID_CREDENTIALS", "path": "/auth/login" }
+{
+  "timestamp": "...",
+  "status": 401,
+  "error": "Unauthorized",
+  "message": "INVALID_CREDENTIALS",
+  "path": "/auth/login"
+}
 ```
 
 **Format B (Home/Session/Reports + GlobalExceptionHandler):** multilingual:
+
 ```json
-{ "code": "VENUE_NOT_FOUND", "message": { "en": "...", "ru": "...", "ky": "..." } }
+{
+  "code": "VENUE_NOT_FOUND",
+  "message": { "en": "...", "ru": "...", "ky": "..." }
+}
 ```
 
 **Format C (JwtAuthEntryPoint / JwtAccessDeniedHandler):** multilingual ama `"details": "null"` (string `"null"`):
+
 ```json
 { "code": "UNAUTHORIZED", "message": { ... }, "details": "null" }
 ```
@@ -42,11 +54,13 @@ Map<String, Object> body = Map.of(
 ```
 
 Output:
+
 ```json
 { "details": "null" }
 ```
 
 Doc:
+
 ```json
 { "details": null }
 ```
@@ -100,7 +114,7 @@ Hepsi en/ru/ky ile MESSAGES'a eklenmeli. Çeviri uzun olacağı için `messages_
 @RequiredArgsConstructor
 public class GlobalExceptionHandler {
     private final MessageSource messages;
-    
+
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ErrorResponse> handle(AppException ex) {
         return ResponseEntity.status(ex.getStatus()).body(ErrorResponse.of(
@@ -114,6 +128,7 @@ public class GlobalExceptionHandler {
 ```
 
 `messages_*.properties`:
+
 ```properties
 SESSION_NOT_FOUND=Session not found
 VENUE_NOT_FOUND=Selected venue not found
@@ -124,6 +139,7 @@ Doc kuralı (her zaman 3 dil) korunur. `Accept-Language` ile tek dil dönmek ist
 ### 5. `Accept-Language` davranışı doc'tan farklı
 
 Doc:
+
 > `Accept-Language` set edilmişse error mesajları sadece o dilde dönebilir (response boyutunu küçültmek için).
 
 Kod her zaman 3 dili döner — bu da doc'a göre default ("client iletmediyse"). Önemli değil — UI esnek. **Ama** doc'taki opsiyonu istersek `LocaleContextHolder.getLocale()` ile single-language switch eklenebilir.
@@ -163,6 +179,7 @@ return Keys.hmacShaKeyFor(secret.getBytes());
 `secret.getBytes()` platform default charset. Linux genelde UTF-8, Windows CP1252. Cross-platform deployment'ta token'lar uyumsuz olabilir.
 
 Düzeltme:
+
 ```java
 return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 ```
@@ -187,6 +204,7 @@ Bkz. [01-auth-review.md](01-auth-review.md) #10. Eski bir refresh token tekrar k
 Logout sadece `user.refreshToken = null`. Access token (15 dk geçerli) hala valid. Çalınan access token logout'tan sonra 15 dk daha kullanılabilir.
 
 Doc bunu kabul ediyor:
+
 > İstemci local token'ı önce temizler, sonra remote'a istek atar; backend hatası swallow edilir.
 
 MVP için tolere edilir. Production: access token blacklist (Redis) veya kısa expiry (5dk).
@@ -209,6 +227,7 @@ public boolean isTokenValid(String token) {
 `ExpiredJwtException`, `SignatureException`, `MalformedJwtException` — hepsi false döner. İstemci "token expired → refresh çağır" veya "invalid → logout" ayrımı yapamaz. EntryPoint hep aynı message döner.
 
 Düzeltme:
+
 ```java
 public TokenStatus validate(String token) {
     try {
@@ -247,6 +266,7 @@ Düzeltme: refresh token'a `"type": "refresh"` claim ekle, filter sadece `type=a
 `SecurityFilterChain` config'inde `.cors(...)` çağrısı yok. Mobil farklı origin'den (development'ta `http://localhost:3000` web preview) çağırırsa preflight 401 alır.
 
 Düzeltme:
+
 ```java
 @Bean
 public CorsConfigurationSource corsConfigurationSource() {
@@ -331,6 +351,7 @@ DTO'lar entity'lerden ayrı → mass assignment yok. ✅
 ### 27. Email enumeration riski
 
 `POST /auth/forgot-password` doc:
+
 > Gizlilik için backend email kayıtlı mı kayıtsız mı ayrımı yapmadan 200 dönmeli.
 
 Kod hiçbir şey yapmıyor, 200 döner ✓. Ama gerçek implementasyon yapılırken bu kural unutulmamalı — `EMAIL_NOT_FOUND` döndürmek enumeration vektörü.

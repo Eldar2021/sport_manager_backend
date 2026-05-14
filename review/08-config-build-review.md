@@ -9,6 +9,7 @@ Kod: [pom.xml](../pom.xml), [application.yml](../src/main/resources/application.
 ### 1. Hiç test yok
 
 `pom.xml` test scope dependency'leri ekli:
+
 ```xml
 <dependency>spring-boot-starter-data-jpa-test</dependency>
 <dependency>spring-boot-starter-security-test</dependency>
@@ -53,7 +54,7 @@ Spring Boot Test + Testcontainers (PostgreSQL) idealdir — Hibernate JPQL postg
 spring:
   jpa:
     hibernate:
-      ddl-auto: validate    # ← Flyway schema'yı yönetiyor, Hibernate yalnız doğruluyor
+      ddl-auto: validate # ← Flyway schema'yı yönetiyor, Hibernate yalnız doğruluyor
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -263,6 +264,7 @@ Yeni dev onboard'unu basitleştirir.
 GitHub Actions / GitLab CI dosyası yok (root'ta `.github/`, `.gitlab-ci.yml` görünmüyor). Manuel deploy = "deploy'da bozulur" riski.
 
 Minimum CI:
+
 - Test
 - Maven build
 - Docker build + tag
@@ -302,17 +304,17 @@ Springdoc 2.7+ Spring Boot 3.4 destekler. 2.8.8 Spring Boot 4 ile resmi destek l
 
 ## Operations Eksiklikleri
 
-| Konu | Durum | Etki |
-|------|-------|------|
-| Health endpoint | Yok | Cloud platform restart loop |
-| Structured logging | Yok | Cloud log query'leri zor |
-| Metrics (Prometheus) | Yok | Performans gözlemi yok |
-| Rate limiting | Yok | Brute force / DoS riski |
-| Request tracing (W3C Trace Context) | Yok | Distributed debugging zor |
-| Backup / DR | Bilinmiyor | Veri kaybı riski |
-| Secrets management | env var (önerilen) | KV store (Vault, SecretsManager) ideal |
-| Cron job (subscription transition) | Yok | Bkz. [06](06-subscription-review.md) |
-| Email (forgot-password) | Yok | Auth akışı eksik |
+| Konu                                | Durum              | Etki                                   |
+| ----------------------------------- | ------------------ | -------------------------------------- |
+| Health endpoint                     | Yok                | Cloud platform restart loop            |
+| Structured logging                  | Yok                | Cloud log query'leri zor               |
+| Metrics (Prometheus)                | Yok                | Performans gözlemi yok                 |
+| Rate limiting                       | Yok                | Brute force / DoS riski                |
+| Request tracing (W3C Trace Context) | Yok                | Distributed debugging zor              |
+| Backup / DR                         | Bilinmiyor         | Veri kaybı riski                       |
+| Secrets management                  | env var (önerilen) | KV store (Vault, SecretsManager) ideal |
+| Cron job (subscription transition)  | Yok                | Bkz. [06](06-subscription-review.md)   |
+| Email (forgot-password)             | Yok                | Auth akışı eksik                       |
 
 ---
 
