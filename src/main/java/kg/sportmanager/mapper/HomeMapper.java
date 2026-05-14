@@ -1,6 +1,7 @@
 package kg.sportmanager.mapper;
 
 import kg.sportmanager.dto.response.SessionResponse;
+import kg.sportmanager.dto.response.TableListItemResponse;
 import kg.sportmanager.dto.response.TableResponse;
 import kg.sportmanager.dto.response.VenueResponse;
 import kg.sportmanager.entity.Session;
@@ -63,5 +64,21 @@ public class HomeMapper {
         return tables.stream()
                 .map(t -> toTableResponse(t, sessionFetcher.apply(t)))
                 .toList();
+    }
+
+    /** Lightweight item — {@code GET /venue/{id}/tables} response için. */
+    public TableListItemResponse toTableListItem(Tables table) {
+        return TableListItemResponse.builder()
+                .id(table.getId().toString())
+                .venueId(table.getVenue().getId().toString())
+                .number(table.getNumber())
+                .name(table.getName())
+                .description(table.getDescription())
+                .tarifAmount(table.getTarifAmount())
+                .currency(table.getCurrency().name())
+                .tarifType(table.getTarifType().name())
+                .createdAt(table.getCreatedAt())
+                .updatedAt(table.getUpdatedAt())
+                .build();
     }
 }

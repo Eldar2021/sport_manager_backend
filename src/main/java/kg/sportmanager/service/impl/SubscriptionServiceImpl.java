@@ -49,7 +49,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public SubscriptionDetailResponse getDetail(User user) {
         requireOwner(user);
         Subscription sub = subscriptionRepository.findByOwner(user)
-                .orElseThrow(() -> new AppException("REPORT_NOT_FOUND", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new AppException("SUBSCRIPTION_NOT_FOUND", HttpStatus.NOT_FOUND));
         recomputeStatus(sub);
         subscriptionRepository.save(sub);
 
