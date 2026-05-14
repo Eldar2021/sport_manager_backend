@@ -290,23 +290,34 @@ Boş.
 
 **Auth:** required (`Authorization: Bearer <accessToken>`) — OWNER + MANAGER her ikisi.
 
-Authenticated kullanıcının parolasını günceller. Eski parolayı doğrular,
-yeniyi `bcrypt`'le hash'leyip kaydeder ve **yeni bir token pair** döndürür
-(rotation: önceki refresh token DB'de invalidate edilir).
+Authenticated kullanıcı yeni bir parola belirler ve **yeni bir token pair**
+alır (rotation: önceki refresh token DB'de invalidate edilir).
+
+**Eski parola sorgulanmaz** — bu endpoint tipik olarak "parolamı unuttum"
+akışından sonra çağrılır: kullanıcı email ile gelen geçici parola ile login
+olur, ardından kendi seçtiği parolaya geçer. Aynı endpoint settings ekranındaki
+"parolamı değiştir" akışını da besler (kullanıcı zaten oturum açtığı için
+yeniden eski parola sormak gereksiz; çalınmış token koruması `login` alanı
+üzerinden yapılır — aşağı bkz.).
 
 ### Request body
 
 ```json
 {
-  "oldPassword": "OldPass12",
-  "newPassword": "NewPass99"
+  "login": "test@gmail.com",
+  "newPassword": "test12345"
 }
 ```
 
-| Field         | Type   | Required | Rules                |
-| ------------- | ------ | :------: | -------------------- |
-| `oldPassword` | string |   yes    | NotBlank             |
-| `newPassword` | string |   yes    | NotBlank, 8–100 char |
+| Field         | Type   | Required | Rules                                                                                                |
+| ------------- | ------ | :------: | ---------------------------------------------------------------------------------------------------- |
+| `login`       | string |   yes    | NotBlank. Authenticated user'ın **email veya phone**'u ile eşleşmeli (email case-insensitive match). |
+| `newPassword` | string |   yes    | NotBlank, 8–100 char                                                                                 |
+
+> **`login` neden istenir?** Defansif: bir saldırgan çalınmış access token ile
+> başka kullanıcının parolasını değiştiremesin diye. Server `login`'in
+> authenticated principal'a ait olduğunu doğrular; eşleşmiyorsa
+> `400 INVALID_CREDENTIALS` döner.
 
 ### 200 OK — response body
 
@@ -322,16 +333,31 @@ yeniyi `bcrypt`'le hash'leyip kaydeder ve **yeni bir token pair** döndürür
 
 ### Errors
 
-| HTTP | `code`                | Trigger                                  |
-| ---- | --------------------- | ---------------------------------------- |
-| 400  | `INVALID_CREDENTIALS` | `oldPassword` yanlış                     |
-| 400  | `UNAUTHORIZED`        | Token yok / bozuk                        |
-| 401  | `SESSION_EXPIRED`     | Access token **expired**                 |
-| 422  | `VALIDATION_ERROR`    | `newPassword < 8 char`, boş alanlar, vb. |
+| HTTP | `code`                | Trigger                                                    |
+| ---- | --------------------- | ---------------------------------------------------------- |
+| 400  | `INVALID_CREDENTIALS` | `login` authenticated user'ın email/phone'u ile eşleşmiyor |
+| 400  | `UNAUTHORIZED`        | Token yok / bozuk                                          |
+| 401  | `SESSION_EXPIRED`     | Access token **expired**                                   |
+| 422  | `VALIDATION_ERROR`    | `newPassword < 8 char`, boş alanlar, eksik field, vb.      |
 
-> Bu endpoint genelde `forgot-password` ile birlikte kullanılır: kullanıcı email
-> üzerinden yeni şifre alır, onunla login olur, sonra `update-password` ile
-> kendi seçtiği şifreye geçer.
+### Flow örnekleri
+
+**1) "Parolamı unuttum" akışı:**
+
+```
+1. POST /auth/forgot-password { email }     → email'e geçici parola
+2. POST /auth/login { username, password }   → tokens
+3. POST /auth/update-password { login, newPassword } → yeni tokens
+```
+
+**2) Settings'ten parola değiştirme:**
+
+```
+Kullanıcı zaten oturum açmış (access token elinde).
+POST /auth/update-password { login, newPassword } → yeni tokens
+```
+
+İki akışta da backend tarafı aynı — endpoint authenticated, eski parola sorgulanmaz.
 
 ---
 
