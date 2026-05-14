@@ -8,6 +8,7 @@ import kg.sportmanager.dto.request.ForgotPasswordRequest;
 import kg.sportmanager.dto.request.LoginRequest;
 import kg.sportmanager.dto.request.RefreshTokenRequest;
 import kg.sportmanager.dto.request.RegisterRequest;
+import kg.sportmanager.dto.request.UpdatePasswordRequest;
 import kg.sportmanager.dto.response.AuthResponse;
 import kg.sportmanager.dto.response.InviteCodeResponse;
 import kg.sportmanager.dto.response.TokenPairResponse;
@@ -81,5 +82,16 @@ public class AuthController {
     @PostMapping("/invite-code")
     public ResponseEntity<InviteCodeResponse> inviteCode(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(authService.generateInviteCode(user));
+    }
+
+    @Operation(summary = "Смена пароля",
+            description = "Меняет пароль authenticated-пользователя; возвращает новую пару токенов (старый refresh инвалидируется).")
+    @ApiResponse(responseCode = "200", description = "Пароль обновлён, возвращает новую пару токенов")
+    @ApiResponse(responseCode = "401", description = "Старый пароль неверен")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/update-password")
+    public ResponseEntity<TokenPairResponse> updatePassword(@AuthenticationPrincipal User user,
+                                                            @RequestBody @Valid UpdatePasswordRequest request) {
+        return ResponseEntity.ok(authService.updatePassword(user, request));
     }
 }

@@ -3,6 +3,7 @@ package kg.sportmanager.service.impl;
 import kg.sportmanager.dto.request.LoginRequest;
 import kg.sportmanager.dto.request.RefreshTokenRequest;
 import kg.sportmanager.dto.request.RegisterRequest;
+import kg.sportmanager.dto.request.UpdatePasswordRequest;
 import kg.sportmanager.dto.response.AuthResponse;
 import kg.sportmanager.dto.response.InviteCodeResponse;
 import kg.sportmanager.dto.response.TokenPairResponse;
@@ -139,8 +140,29 @@ public class AuthServiceImpl implements AuthService {
     }
 
     public void logout(User user) {
+        if (user == null) {
+            throw new AppException("UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
         user.setRefreshToken(null);
         userRepository.save(user);
+    }
+
+    public TokenPairResponse updatePassword(User user, UpdatePasswordRequest request) {
+        if (user == null) {
+            throw new AppException("UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new AppException("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED);
+        }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        String newAccess = jwtUtil.generateAccessToken(user);
+        String newRefresh = jwtUtil.generateRefreshToken(user);
+        user.setRefreshToken(newRefresh);
+        userRepository.save(user);
+        return TokenPairResponse.builder()
+                .accessToken(newAccess)
+                .refreshToken(newRefresh)
+                .build();
     }
 
     @kg.sportmanager.security.RequiresActiveSubscription
