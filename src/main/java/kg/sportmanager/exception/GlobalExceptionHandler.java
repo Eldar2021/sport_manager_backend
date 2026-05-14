@@ -10,8 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +70,32 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex,
                                                           HttpServletRequest req) {
         log.debug("Unreadable JSON on {}: {}", req.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(envelope("BAD_REQUEST", null));
+    }
+
+    /**
+     * Zorunlu query-parametresi eksik: 500 yerine 400 + envelope döndürürüz.
+     * Reports endpoint'lerinde {@code venueId} / {@code period} / {@code from} / {@code to}
+     * eksik gelirse buraya düşer.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex,
+                                                            HttpServletRequest req) {
+        log.debug("Missing required param '{}' on {}", ex.getParameterName(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(envelope("BAD_REQUEST", null));
+    }
+
+    /**
+     * Geçersiz query-param tipi (örn: {@code from} olarak bozuk ISO 8601 string).
+     * {@link MethodArgumentTypeMismatchException} burada yakalanır → 400 BAD_REQUEST.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                            HttpServletRequest req) {
+        log.debug("Type mismatch for param '{}' on {}: {}",
+                ex.getName(), req.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(envelope("BAD_REQUEST", null));
     }

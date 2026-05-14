@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@org.springframework.transaction.annotation.Transactional(readOnly = true)
 public class ReportsServiceImpl implements ReportsService {
 
     private final VenueRepository venueRepository;
@@ -138,12 +139,14 @@ public class ReportsServiceImpl implements ReportsService {
         // Один SQL вместо N+1: revenue + sessions для всех столов разом.
         Map<UUID, long[]> agg = reportsRepository.aggregateByTable(venue, from, to);
 
-        // Клиппед previous для дельты — тоже один запрос.
-        Map<UUID, Long> prevRevMap = (compare && !"TODAY".equalsIgnoreCase(period))
-                ? reportsRepository.revenueByTable(venue,
-                        clippedPrevious(period, from, to).from(),
-                        clippedPrevious(period, from, to).to())
-                : Map.of();
+        // Clipped previous для дельты — тоже один запрос (range один раз).
+        Map<UUID, Long> prevRevMap;
+        if (compare && !"TODAY".equalsIgnoreCase(period)) {
+            PeriodRange clip = clippedPrevious(period, from, to);
+            prevRevMap = reportsRepository.revenueByTable(venue, clip.from(), clip.to());
+        } else {
+            prevRevMap = Map.of();
+        }
 
         List<TableReportRowResponse> rows = new ArrayList<>();
         for (Tables t : tables) {
@@ -303,9 +306,18 @@ public class ReportsServiceImpl implements ReportsService {
         // Факт: ряд от from до сегодня
         List<RevenuePointResponse> actualSeries = buildRevenueSeries(venue, period, from, to);
 
-        // Период-зависимый порог: для YEAR bucket=месяц → 2 месяца достаточно;
-        // для дневных периодов нужно минимум 7 дней (как в docs).
-        int minBuckets = "YEAR".equalsIgnoreCase(period) ? 2 : 7;
+        // Период-зависимый порог.
+        //  - WEEK: bucket=день, окно ≤7 дней; требуем минимум 2 дня (иначе
+        //    линейная регрессия по одной точке невозможна). Раньше стоял
+        //    жёсткий порог 7 — это означало, что WEEK forecast никогда не
+        //    срабатывал до воскресенья (баг, см. report от мобильной команды).
+        //  - MONTH: bucket=день; требуем минимум 7 дней.
+        //  - YEAR: bucket=месяц; требуем минимум 2 месяца.
+        int minBuckets = switch (period.toUpperCase()) {
+            case "MONTH" -> 7;
+            case "YEAR"  -> 2;
+            default      -> 2; // WEEK / CUSTOM / unknown — минимум для регрессии
+        };
         if (actualSeries.size() < minBuckets) {
             throw new AppException("NOT_ENOUGH_DATA", HttpStatus.UNPROCESSABLE_ENTITY);
         }
@@ -328,22 +340,22 @@ public class ReportsServiceImpl implements ReportsService {
 
         long realSoFar = actualSeries.stream().mapToLong(RevenuePointResponse::getRevenue).sum();
 
-        // Индекс последнего фактического бакета
-        Set<Instant> actualBuckets = actualSeries.stream()
-                .map(RevenuePointResponse::getBucket)
-                .collect(Collectors.toSet());
+        // O(1) lookup для фактических бакетов — раньше для каждого бакета
+        // стримили actualSeries и фильтровали, что давало O(n²).
+        Map<Instant, Long> actualByBucket = actualSeries.stream()
+                .collect(Collectors.toMap(
+                        RevenuePointResponse::getBucket,
+                        RevenuePointResponse::getRevenue,
+                        (a, b) -> a));
 
         List<ForecastResponse.ForecastPoint> points = new ArrayList<>();
         long projSum = 0;
         int projIdx = n; // продолжаем индекс регрессии
 
         for (Instant bucket : allBuckets) {
-            if (actualBuckets.contains(bucket)) {
-                // Фактический день
-                long factRev = actualSeries.stream()
-                        .filter(p -> p.getBucket().equals(bucket))
-                        .mapToLong(RevenuePointResponse::getRevenue)
-                        .findFirst().orElse(0L);
+            Long factRevBoxed = actualByBucket.get(bucket);
+            if (factRevBoxed != null) {
+                long factRev = factRevBoxed;
                 points.add(ForecastResponse.ForecastPoint.builder()
                         .bucket(bucket)
                         .expected(factRev)
@@ -409,8 +421,16 @@ public class ReportsServiceImpl implements ReportsService {
         return table;
     }
 
+    /**
+     * Менеджер для report-detail. OWNER, который сам стартует/закрывает сессии,
+     * появляется в /reports/managers с managerId = owner.id; чтобы detail-страница
+     * не упала с MANAGER_NOT_FOUND, разрешаем owner-у быть «менеджером самого себя».
+     */
     private User resolveManager(User owner, String managerId) {
         UUID id = parseUuid(managerId);
+        if (id.equals(owner.getId())) {
+            return owner; // owner как «менеджер» своих собственных сессий
+        }
         return userRepository.findByIdAndOwnerAndDeletedAtIsNull(id, owner)
                 .filter(u -> u.getRole() == User.Role.MANAGER)
                 .orElseThrow(() -> new AppException("MANAGER_NOT_FOUND", HttpStatus.NOT_FOUND));
