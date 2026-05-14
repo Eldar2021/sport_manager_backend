@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: "jdbc:h2:mem:sport_manager_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1"
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+  flyway:
+    enabled: false
+
+jwt:
+  secret: "test-secret-key-please-do-not-use-in-production-1234567890"
+  access-expiration: 900000
+  refresh-expiration: 2592000000
+
+subscription:
+  price-per-table: 200
+  currency: KGS
+  min-duration-months: 1
+  max-duration-months: 12
+  grace-period-days: 5
+  free-trial-days: 14
+  expiry-warning-days: 3
+  payment-provider: MOCK
+
+logging:
+  level:
+    root: WARN
+    kg.sportmanager: INFO
+    org.hibernate.SQL: ERROR
+    org.springframework.security: WARN

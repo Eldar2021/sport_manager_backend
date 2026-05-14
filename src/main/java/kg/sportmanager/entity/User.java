@@ -78,6 +78,7 @@ public class User implements UserDetails {
 
     @JsonIgnore
     @ToString.Exclude
+    @Column(length = 2048)
     private String refreshToken;
 
     private boolean locked = false;

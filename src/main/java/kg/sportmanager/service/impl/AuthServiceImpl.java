@@ -3,6 +3,7 @@ package kg.sportmanager.service.impl;
 import kg.sportmanager.dto.request.LoginRequest;
 import kg.sportmanager.dto.request.RefreshTokenRequest;
 import kg.sportmanager.dto.request.RegisterRequest;
+import kg.sportmanager.dto.request.UpdatePasswordRequest;
 import kg.sportmanager.dto.response.AuthResponse;
 import kg.sportmanager.dto.response.InviteCodeResponse;
 import kg.sportmanager.dto.response.TokenPairResponse;
@@ -36,14 +37,14 @@ public class AuthServiceImpl implements AuthService {
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmailOrPhone(request.getUsername(), request.getUsername())
-                .orElseThrow(() -> new AppException("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new AppException("INVALID_CREDENTIALS", HttpStatus.BAD_REQUEST));
 
         if (user.isLocked()) {
             throw new AppException("ACCOUNT_LOCKED", HttpStatus.LOCKED);
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new AppException("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED);
+            throw new AppException("INVALID_CREDENTIALS", HttpStatus.BAD_REQUEST);
         }
 
         return buildAuthResponse(user);
@@ -110,22 +111,25 @@ public class AuthServiceImpl implements AuthService {
 
     public TokenPairResponse refresh(RefreshTokenRequest request) {
         if (request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
-            throw new AppException("SESSION_EXPIRED", HttpStatus.UNAUTHORIZED);
+            throw new AppException("INVALID_TOKEN", HttpStatus.BAD_REQUEST);
         }
 
-        // Stored token must match the one client sent (rotation prevents reuse of stale tokens)
-        User user = userRepository.findByRefreshToken(request.getRefreshToken())
-                .orElseThrow(() -> new AppException("SESSION_EXPIRED", HttpStatus.UNAUTHORIZED));
-
         JwtUtil.TokenStatus status = jwtUtil.check(request.getRefreshToken());
-        if (status != JwtUtil.TokenStatus.VALID) {
+        if (status == JwtUtil.TokenStatus.EXPIRED) {
             throw new AppException("SESSION_EXPIRED", HttpStatus.UNAUTHORIZED);
+        }
+        if (status != JwtUtil.TokenStatus.VALID) {
+            throw new AppException("INVALID_TOKEN", HttpStatus.BAD_REQUEST);
         }
 
         // Reject access-tokens sent to /refresh
         if (!JwtUtil.TYPE_REFRESH.equals(jwtUtil.extractType(request.getRefreshToken()))) {
-            throw new AppException("SESSION_EXPIRED", HttpStatus.UNAUTHORIZED);
+            throw new AppException("INVALID_TOKEN_TYPE", HttpStatus.BAD_REQUEST);
         }
+
+        // Stored token must match the one client sent (rotation prevents reuse of stale tokens)
+        User user = userRepository.findByRefreshToken(request.getRefreshToken())
+                .orElseThrow(() -> new AppException("INVALID_TOKEN", HttpStatus.BAD_REQUEST));
 
         String newAccess = jwtUtil.generateAccessToken(user);
         String newRefresh = jwtUtil.generateRefreshToken(user);
@@ -139,8 +143,31 @@ public class AuthServiceImpl implements AuthService {
     }
 
     public void logout(User user) {
+        // /logout is permitAll: identify caller from token if present, otherwise 400.
+        // Spec: logout never returns 401 — success → 200, anything else → 400.
+        if (user == null) {
+            throw new AppException("LOGOUT_FAILED", HttpStatus.BAD_REQUEST);
+        }
         user.setRefreshToken(null);
         userRepository.save(user);
+    }
+
+    public TokenPairResponse updatePassword(User user, UpdatePasswordRequest request) {
+        if (user == null) {
+            throw new AppException("UNAUTHORIZED", HttpStatus.BAD_REQUEST);
+        }
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new AppException("INVALID_CREDENTIALS", HttpStatus.BAD_REQUEST);
+        }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        String newAccess = jwtUtil.generateAccessToken(user);
+        String newRefresh = jwtUtil.generateRefreshToken(user);
+        user.setRefreshToken(newRefresh);
+        userRepository.save(user);
+        return TokenPairResponse.builder()
+                .accessToken(newAccess)
+                .refreshToken(newRefresh)
+                .build();
     }
 
     @kg.sportmanager.security.RequiresActiveSubscription

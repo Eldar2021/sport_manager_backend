@@ -51,6 +51,10 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/refresh",
+                                // logout is permitAll so it can return 400 (never 401) when
+                                // token is missing/invalid/expired — service identifies the
+                                // caller from token if filter set the SecurityContext.
+                                "/api/v1/auth/logout",
                                 "/actuator/health/**",
                                 "/actuator/info",
                                 "/swagger-ui/**",
