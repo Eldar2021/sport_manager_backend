@@ -33,4 +33,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Reports/Managers: найти менеджера по id с проверкой принадлежности владельцу. */
     Optional<User> findByIdAndOwnerAndDeletedAtIsNull(UUID id, User owner);
+
+    /** Profile: число активных (не soft-deleted) менеджеров у данного владельца. */
+    long countByOwnerAndRoleAndDeletedAtIsNull(User owner, User.Role role);
 }

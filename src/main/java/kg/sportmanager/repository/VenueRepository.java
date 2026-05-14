@@ -23,4 +23,6 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     boolean existsByOwnerAndNumberAndIdNotAndDeletedAtIsNull(User owner, Integer number, UUID id);
 
     Optional<Venue> findFirstByOwnerAndDeletedAtIsNullOrderByCreatedAtAsc(User owner);
+
+    long countByOwnerAndDeletedAtIsNull(User owner);
 }
