@@ -147,7 +147,15 @@ public class HomeServiceImpl implements HomeService {
         tableRepository.saveAll(tables);
 
         venue.setDeletedAt(now);
-        if (venue.isSelected()) {
+        // Data hygiene: silinmiş venue selected=true kalmamalı. Aksi halde
+        // restore (un-delete) durumlarında veya raporlamada iki "selected" venue gözükür.
+        boolean wasSelected = venue.isSelected();
+        if (wasSelected) {
+            venue.setSelected(false);
+        }
+        venueRepository.saveAndFlush(venue); // pending change'leri flush et ki sonraki query tutarlı olsun
+
+        if (wasSelected) {
             venueRepository.findFirstByOwnerAndDeletedAtIsNullOrderByCreatedAtAsc(user)
                     .filter(v -> !v.getId().equals(venue.getId()))
                     .ifPresent(v -> {
@@ -155,7 +163,6 @@ public class HomeServiceImpl implements HomeService {
                         venueRepository.save(v);
                     });
         }
-        venueRepository.save(venue);
 
         return DeleteResponse.builder().id(venueId).deleted(true).build();
     }
