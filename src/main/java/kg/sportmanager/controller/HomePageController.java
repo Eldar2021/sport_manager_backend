@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -49,7 +50,7 @@ public class HomePageController {
     @PatchMapping("/venue/selected")
     public ResponseEntity<SelectedVenueResponse> updateSelectedVenue(
             @AuthenticationPrincipal User user,
-            @RequestBody SelectVenueRequest request) {
+            @RequestBody @Valid SelectVenueRequest request) {
         return ResponseEntity.ok(homeService.updateSelectedVenue(user, request));
     }
 
@@ -59,7 +60,7 @@ public class HomePageController {
     @PostMapping("/venue/create")
     public ResponseEntity<VenueResponse> createVenue(
             @AuthenticationPrincipal User user,
-            @RequestBody VenueRequest request) {
+            @RequestBody @Valid VenueRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(homeService.createVenue(user, request));
     }
 
@@ -70,7 +71,7 @@ public class HomePageController {
     public ResponseEntity<VenueResponse> updateVenue(
             @AuthenticationPrincipal User user,
             @Parameter(description = "ID зала") @PathVariable String id,
-            @RequestBody VenueRequest request) {
+            @RequestBody @Valid VenueRequest request) {
         return ResponseEntity.ok(homeService.updateVenue(user, id, request));
     }
 
@@ -89,7 +90,7 @@ public class HomePageController {
     @PostMapping("/table/create")
     public ResponseEntity<TableResponse> createTable(
             @AuthenticationPrincipal User user,
-            @RequestBody TableRequest request) {
+            @RequestBody @Valid TableRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(homeService.createTable(user, request));
     }
 
@@ -100,7 +101,7 @@ public class HomePageController {
     public ResponseEntity<TableResponse> updateTable(
             @AuthenticationPrincipal User user,
             @Parameter(description = "ID стола") @PathVariable String id,
-            @RequestBody TableRequest request) {
+            @RequestBody @Valid TableRequest request) {
         return ResponseEntity.ok(homeService.updateTable(user, id, request));
     }
 

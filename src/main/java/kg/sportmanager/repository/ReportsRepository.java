@@ -102,7 +102,33 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
 
     default Map<UUID, Long> revenueByTable(Venue venue, Instant from, Instant to) {
         Map<UUID, Long> result = new java.util.HashMap<>();
-        revenueByTableRaw(venue, from, to).forEach(row -> result.put((UUID) row[0], (Long) row[1]));
+        revenueByTableRaw(venue, from, to).forEach(row -> result.put((UUID) row[0], ((Number) row[1]).longValue()));
+        return result;
+    }
+
+    /**
+     * Объединённая агрегация (revenue + sessions) по столам зала — устраняет N+1 в getTables.
+     * Возвращает Object[]: [tableId UUID, revenue long, sessions long].
+     */
+    @Query("""
+            SELECT s.table.id AS tableId,
+                   COALESCE(SUM(CASE WHEN s.status='COMPLETED' THEN s.totalAmount ELSE 0 END), 0) AS revenue,
+                   COUNT(CASE WHEN s.status='COMPLETED' THEN 1 END) AS sessions
+            FROM Session s
+            WHERE s.table.venue = :venue
+              AND s.startedAt >= :from
+              AND s.startedAt < :to
+            GROUP BY s.table.id
+            """)
+    List<Object[]> aggregateByTableRaw(@Param("venue") Venue venue,
+                                       @Param("from") Instant from,
+                                       @Param("to") Instant to);
+
+    default Map<UUID, long[]> aggregateByTable(Venue venue, Instant from, Instant to) {
+        Map<UUID, long[]> result = new java.util.HashMap<>();
+        aggregateByTableRaw(venue, from, to).forEach(row -> result.put(
+                (UUID) row[0],
+                new long[]{((Number) row[1]).longValue(), ((Number) row[2]).longValue()}));
         return result;
     }
 
@@ -157,7 +183,7 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
         SELECT
             s.manager.id        AS managerId,
             s.manager.name      AS managerName,
-            s.manager.email     AS username,
+            s.manager.handle    AS username,
             COALESCE(SUM(CASE WHEN s.status = 'COMPLETED' THEN s.totalAmount ELSE 0 END), 0) AS revenue,
             COUNT(CASE WHEN s.status = 'COMPLETED' THEN 1 END)   AS sessions,
             COUNT(CASE WHEN s.status = 'CANCELLED' THEN 1 END)   AS cancelCount
@@ -166,7 +192,7 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
           AND s.startedAt >= :from
           AND s.startedAt < :to
           AND s.manager IS NOT NULL
-        GROUP BY s.manager.id, s.manager.name, s.manager.email
+        GROUP BY s.manager.id, s.manager.name, s.manager.handle
         """)
     List<ManagerStatProjection> managerStats(@Param("venue") Venue venue,
                                              @Param("from") Instant from,

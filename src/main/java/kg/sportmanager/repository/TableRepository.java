@@ -21,4 +21,13 @@ public interface TableRepository extends JpaRepository<Tables, UUID> {
     boolean existsByVenueAndNumberAndIdNotAndDeletedAtIsNull(Venue venue, Integer number, UUID id);
 
     boolean existsByVenueAndDeletedAtIsNull(Venue venue);
+
+    /** Fast count for venue list — avoids loading all rows just to .size(). */
+    long countByVenueAndDeletedAtIsNull(Venue venue);
+
+    /** Sum of tables across all owner's venues — used by Subscription pricing. */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT COUNT(t) FROM Tables t WHERE t.venue.owner = :owner AND t.deletedAt IS NULL AND t.venue.deletedAt IS NULL"
+    )
+    long countByOwner(@org.springframework.data.repository.query.Param("owner") kg.sportmanager.entity.User owner);
 }

@@ -8,6 +8,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -23,15 +24,14 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType("application/json; charset=utf-8");
 
-        Map<String, Object> body = Map.of(
-                "code", "FORBIDDEN",
-                "message", Map.of(
-                        "en", "Access denied",
-                        "ru", "Нет прав на это действие",
-                        "ky", "Бул аракетке укук жок"
-                ),
-                "details", "null"
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", "FORBIDDEN");
+        body.put("message", Map.of(
+                "en", "Access denied",
+                "ru", "Нет прав на это действие",
+                "ky", "Бул аракетке укук жок"
+        ));
+        body.put("details", null);
 
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }

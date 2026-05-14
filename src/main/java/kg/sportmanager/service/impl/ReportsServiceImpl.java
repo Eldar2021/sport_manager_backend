@@ -9,6 +9,7 @@ import kg.sportmanager.exception.AppException;
 import kg.sportmanager.repository.ReportsRepository;
 import kg.sportmanager.repository.SessionRepository;
 import kg.sportmanager.repository.TableRepository;
+import kg.sportmanager.repository.UserRepository;
 import kg.sportmanager.repository.VenueRepository;
 import kg.sportmanager.service.ReportsService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class ReportsServiceImpl implements ReportsService {
     private final TableRepository tableRepository;
     private final SessionRepository sessionRepository;
     private final ReportsRepository reportsRepository;
+    private final UserRepository userRepository;
 
     // ─────────────────────────────────────────────────────────────
     // 1. GET /reports/venues
@@ -133,22 +135,24 @@ public class ReportsServiceImpl implements ReportsService {
 
         List<Tables> tables = tableRepository.findByVenueAndDeletedAtIsNullOrderByNumberAsc(venue);
 
-        // Клиппед previous для дельты
-        Map<UUID, Long> prevRevMap = new HashMap<>();
-        if (compare && !"TODAY".equalsIgnoreCase(period)) {
-            PeriodRange clip = clippedPrevious(period, from, to);
-            prevRevMap = reportsRepository.revenueByTable(venue, clip.from(), clip.to());
-        }
+        // Один SQL вместо N+1: revenue + sessions для всех столов разом.
+        Map<UUID, long[]> agg = reportsRepository.aggregateByTable(venue, from, to);
 
-        Map<UUID, Long> finalPrevRevMap = prevRevMap;
+        // Клиппед previous для дельты — тоже один запрос.
+        Map<UUID, Long> prevRevMap = (compare && !"TODAY".equalsIgnoreCase(period))
+                ? reportsRepository.revenueByTable(venue,
+                        clippedPrevious(period, from, to).from(),
+                        clippedPrevious(period, from, to).to())
+                : Map.of();
+
         List<TableReportRowResponse> rows = new ArrayList<>();
-
         for (Tables t : tables) {
-            long rev = reportsRepository.sumRevenueByTable(t, from, to);
-            long sess = reportsRepository.countCompletedByTable(t, from, to);
+            long[] rs = agg.getOrDefault(t.getId(), new long[]{0L, 0L});
+            long rev = rs[0];
+            long sess = rs[1];
             Integer delta = null;
             if (compare && !"TODAY".equalsIgnoreCase(period)) {
-                long prev = finalPrevRevMap.getOrDefault(t.getId(), 0L);
+                long prev = prevRevMap.getOrDefault(t.getId(), 0L);
                 delta = prev > 0 ? (int) Math.round((rev - prev) * 100.0 / prev) : null;
             }
             rows.add(TableReportRowResponse.builder()
@@ -181,6 +185,10 @@ public class ReportsServiceImpl implements ReportsService {
         requireOwner(user);
         Venue venue = resolveVenue(user, venueId);
         Tables table = resolveTable(user, tableId);
+        // Стол должен принадлежать запрошенному venue — иначе summary и heatmap расходятся.
+        if (!table.getVenue().getId().equals(venue.getId())) {
+            throw new AppException("TABLE_NOT_FOUND", HttpStatus.NOT_FOUND);
+        }
         String currency = resolveCurrency(venue);
 
         long rev = reportsRepository.sumRevenueByTable(table, from, to);
@@ -252,7 +260,7 @@ public class ReportsServiceImpl implements ReportsService {
         Venue venue = resolveVenue(user, venueId);
         String currency = resolveCurrency(venue);
 
-        User manager = resolveManager(managerId);
+        User manager = resolveManager(user, managerId);
 
         long rev = reportsRepository.sumRevenueByManager(venue, manager, from, to);
         long sess = reportsRepository.countCompletedByManager(venue, manager, from, to);
@@ -261,7 +269,7 @@ public class ReportsServiceImpl implements ReportsService {
         ManagerReportRowResponse summary = ManagerReportRowResponse.builder()
                 .managerId(managerId)
                 .name(manager.getName())
-                .username(manager.getUsername())
+                .username(manager.getHandle())
                 .revenue(rev)
                 .sessions(sess)
                 .cancelCount(cancelCount)
@@ -295,7 +303,10 @@ public class ReportsServiceImpl implements ReportsService {
         // Факт: ряд от from до сегодня
         List<RevenuePointResponse> actualSeries = buildRevenueSeries(venue, period, from, to);
 
-        if (actualSeries.size() < 7) {
+        // Период-зависимый порог: для YEAR bucket=месяц → 2 месяца достаточно;
+        // для дневных периодов нужно минимум 7 дней (как в docs).
+        int minBuckets = "YEAR".equalsIgnoreCase(period) ? 2 : 7;
+        if (actualSeries.size() < minBuckets) {
             throw new AppException("NOT_ENOUGH_DATA", HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
@@ -398,9 +409,10 @@ public class ReportsServiceImpl implements ReportsService {
         return table;
     }
 
-    private User resolveManager(String managerId) {
-        // Предполагаем UserRepository доступен через ReportsRepository или отдельно
-        return reportsRepository.findManagerById(managerId)
+    private User resolveManager(User owner, String managerId) {
+        UUID id = parseUuid(managerId);
+        return userRepository.findByIdAndOwnerAndDeletedAtIsNull(id, owner)
+                .filter(u -> u.getRole() == User.Role.MANAGER)
                 .orElseThrow(() -> new AppException("MANAGER_NOT_FOUND", HttpStatus.NOT_FOUND));
     }
 
@@ -580,7 +592,7 @@ public class ReportsServiceImpl implements ReportsService {
                 .endedAt(s.getEndedAt())
                 .status(s.getStatus().name())
                 .currency(currency)
-                .durationSeconds(Long.valueOf(s.getDurationSeconds()))
+                .durationSeconds(s.getDurationSeconds() == null ? null : s.getDurationSeconds().longValue())
                 .totalAmount(s.getTotalAmount())
                 .cancelReason(s.getCancelReason())
                 .build();

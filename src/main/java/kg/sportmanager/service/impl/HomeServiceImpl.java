@@ -13,6 +13,7 @@ import kg.sportmanager.mapper.HomeMapper;
 import kg.sportmanager.repository.SessionRepository;
 import kg.sportmanager.repository.TableRepository;
 import kg.sportmanager.repository.VenueRepository;
+import kg.sportmanager.security.RequiresActiveSubscription;
 import kg.sportmanager.service.HomeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -39,7 +40,7 @@ public class HomeServiceImpl implements HomeService {
                 .findByOwnerAndDeletedAtIsNullOrderByNumberAscCreatedAtAsc(resolveOwner(user));
 
         return venues.stream().map(v -> {
-            int count = tableRepository.findByVenueAndDeletedAtIsNullOrderByNumberAsc(v).size();
+            int count = (int) tableRepository.countByVenueAndDeletedAtIsNull(v);
             return mapper.toVenueResponse(v, count);
         }).toList();
     }
@@ -58,6 +59,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public SelectedVenueResponse updateSelectedVenue(User user, SelectVenueRequest request) {
         User owner = resolveOwner(user);
         UUID venueId = parseUuid(request.getVenueId());
@@ -80,6 +82,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public VenueResponse createVenue(User user, VenueRequest request) {
         requireOwner(user);
         validateVenueRequest(request);
@@ -106,6 +109,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public VenueResponse updateVenue(User user, String venueId, VenueRequest request) {
         requireOwner(user);
         validateVenueRequest(request);
@@ -128,6 +132,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public DeleteResponse deleteVenue(User user, String venueId) {
         requireOwner(user);
         Venue venue = findVenueOwnedBy(user, parseUuid(venueId));
@@ -158,6 +163,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public TableResponse createTable(User user, TableRequest request) {
         requireOwner(user);
         validateTableRequest(request);
@@ -184,6 +190,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public TableResponse updateTable(User user, String tableId, TableRequest request) {
         requireOwner(user);
         validateTableUpdateRequest(request);
@@ -209,6 +216,7 @@ public class HomeServiceImpl implements HomeService {
 
     @Override
     @Transactional
+    @RequiresActiveSubscription
     public DeleteResponse deleteTable(User user, String tableId) {
         requireOwner(user);
         Tables table = findTableOwnedBy(user, parseUuid(tableId));
@@ -228,8 +236,17 @@ public class HomeServiceImpl implements HomeService {
         List<Tables> tables = tableRepository.findByVenueAndDeletedAtIsNullOrderByNumberAsc(venue);
         int count = tables.size();
 
+        // Один запрос вместо N: подтягиваем все активные сессии для этих столов разом.
+        java.util.Map<UUID, Session> activeByTable = tables.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : sessionRepository.findActiveByTables(tables).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                s -> s.getTable().getId(),
+                                s -> s,
+                                (a, b) -> a)); // дубль не должен случаться (partial unique index)
+
         List<TableResponse> tableResponses = mapper.toTableResponseList(tables,
-                t -> sessionRepository.findByTableAndIsActiveTrue(t).orElse(null));
+                t -> activeByTable.get(t.getId()));
 
         return SelectedVenueResponse.builder()
                 .venue(mapper.toVenueResponse(venue, count))
@@ -246,9 +263,7 @@ public class HomeServiceImpl implements HomeService {
 
     /** Manager видит данные своего owner'а */
     private User resolveOwner(User user) {
-        // В текущей схеме manager привязан к owner через InviteCode.
-        // Если у вас есть поле owner в User — верните его. Пока возвращаем самого user.
-        return user;
+        return user.getRole() == User.Role.OWNER ? user : user.getOwner();
     }
 
     private void requireOwner(User user) {

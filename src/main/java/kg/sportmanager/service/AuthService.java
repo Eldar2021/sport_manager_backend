@@ -5,6 +5,7 @@ import kg.sportmanager.dto.request.RefreshTokenRequest;
 import kg.sportmanager.dto.request.RegisterRequest;
 import kg.sportmanager.dto.response.AuthResponse;
 import kg.sportmanager.dto.response.InviteCodeResponse;
+import kg.sportmanager.dto.response.TokenPairResponse;
 import kg.sportmanager.entity.User;
 
 public interface AuthService {
@@ -13,7 +14,8 @@ public interface AuthService {
 
     AuthResponse register(RegisterRequest request);
 
-    AuthResponse refresh(RefreshTokenRequest request);
+    /** Возвращает только пару токенов (без user) — по контракту docs. */
+    TokenPairResponse refresh(RefreshTokenRequest request);
 
     void logout(User user);
 

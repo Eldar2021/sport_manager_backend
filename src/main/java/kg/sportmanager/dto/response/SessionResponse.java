@@ -8,6 +8,8 @@ import lombok.Data;
 public class SessionResponse {
     private String id;
     private String tableId;
+    /** Кто стартовал сессию (per home_page_api.md / managerId). */
+    private String managerId;
     private boolean isActive;
     private boolean isPaused;
     private String startedAt;
