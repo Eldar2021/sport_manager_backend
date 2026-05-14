@@ -18,6 +18,9 @@ public class SessionLiteResponse {
     private UUID id;
     private UUID tableId;
 
+    /** Кто стартовал/держит сессию (owner или manager). */
+    private UUID managerId;
+
     /** ACTIVE | PAUSED */
     private String status;
 

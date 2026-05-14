@@ -185,6 +185,10 @@ public class ReportsServiceImpl implements ReportsService {
         requireOwner(user);
         Venue venue = resolveVenue(user, venueId);
         Tables table = resolveTable(user, tableId);
+        // Стол должен принадлежать запрошенному venue — иначе summary и heatmap расходятся.
+        if (!table.getVenue().getId().equals(venue.getId())) {
+            throw new AppException("TABLE_NOT_FOUND", HttpStatus.NOT_FOUND);
+        }
         String currency = resolveCurrency(venue);
 
         long rev = reportsRepository.sumRevenueByTable(table, from, to);
@@ -299,7 +303,10 @@ public class ReportsServiceImpl implements ReportsService {
         // Факт: ряд от from до сегодня
         List<RevenuePointResponse> actualSeries = buildRevenueSeries(venue, period, from, to);
 
-        if (actualSeries.size() < 7) {
+        // Период-зависимый порог: для YEAR bucket=месяц → 2 месяца достаточно;
+        // для дневных периодов нужно минимум 7 дней (как в docs).
+        int minBuckets = "YEAR".equalsIgnoreCase(period) ? 2 : 7;
+        if (actualSeries.size() < minBuckets) {
             throw new AppException("NOT_ENOUGH_DATA", HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
