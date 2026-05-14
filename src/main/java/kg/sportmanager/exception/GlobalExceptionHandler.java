@@ -8,6 +8,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,6 +57,19 @@ public class GlobalExceptionHandler {
                 .toList();
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(envelope("VALIDATION_ERROR", details));
+    }
+
+    /**
+     * Bozuk JSON body, geçersiz enum değeri, type mismatch vs. — Spring
+     * deserialization aşamasında bunları {@link HttpMessageNotReadableException}
+     * ile fırlatır. 500 dönmek yerine 400 BAD_REQUEST + envelope döndürürüz.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex,
+                                                          HttpServletRequest req) {
+        log.debug("Unreadable JSON on {}: {}", req.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(envelope("BAD_REQUEST", null));
     }
 
     /** Catch-all: на случай неперехваченных исключений. */
