@@ -13,7 +13,6 @@ import org.springframework.stereotype.Repository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -177,7 +176,9 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
                                  @Param("to") Instant to);
 
     /**
-     * Агрегированная статистика по всем менеджерам зала за период.
+     * Менеджеры зала за период. Учитываем только COMPLETED + CANCELLED;
+     * чисто ACTIVE-сессии (в процессе) не должны давать призрачную строку
+     * с 0/0/0 в листинге Reports.
      */
     @Query("""
         SELECT
@@ -192,6 +193,7 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
           AND s.startedAt >= :from
           AND s.startedAt < :to
           AND s.manager IS NOT NULL
+          AND s.status IN ('COMPLETED', 'CANCELLED')
         GROUP BY s.manager.id, s.manager.name, s.manager.handle
         """)
     List<ManagerStatProjection> managerStats(@Param("venue") Venue venue,
@@ -229,9 +231,4 @@ public interface ReportsRepository extends JpaRepository<Session, UUID> {
                                                @Param("from") Instant from,
                                                @Param("to") Instant to);
 
-    /**
-     * Поиск менеджера по id (строка).
-     */
-    @Query("SELECT u FROM User u WHERE CAST(u.id AS string) = :id")
-    Optional<User> findManagerById(@Param("id") String id);
 }
