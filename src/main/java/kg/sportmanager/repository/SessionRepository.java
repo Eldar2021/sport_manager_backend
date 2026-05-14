@@ -25,6 +25,13 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
 
     boolean existsByTable_VenueAndIsActiveTrue(Venue venue);
 
+    /** Managers API — нельзя удалить менеджера с активной сессией. */
+    boolean existsByManagerAndIsActiveTrue(User manager);
+
+    /** Batch lookup активных сессий для нескольких столов сразу — устраняет N+1 на Home. */
+    @Query("SELECT s FROM Session s WHERE s.isActive = true AND s.table IN :tables")
+    List<Session> findActiveByTables(@Param("tables") List<Tables> tables);
+
     // ─── Для Reports: heatmap стола ───────────────────────────────────
 
     @Query("""

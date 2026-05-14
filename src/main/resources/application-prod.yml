@@ -1,0 +1,15 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    kg.sportmanager: INFO
+    org.hibernate.SQL: WARN
+    org.springframework.security: WARN
+
+# Production требует обязательного JWT_SECRET через env-var.
+# Если не задан — приложение упадёт на старте.

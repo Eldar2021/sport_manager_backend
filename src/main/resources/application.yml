@@ -1,28 +1,33 @@
 spring:
   datasource:
-    url: "jdbc:postgresql://localhost:5432/sport_manager?sslmode=require"
-    username: postgres
-    password: postgres
+    url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sport_manager}"
+    username: "${SPRING_DATASOURCE_USERNAME:postgres}"
+    password: "${SPRING_DATASOURCE_PASSWORD:postgres}"
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
+      maximum-pool-size: "${HIKARI_MAX_POOL:10}"
       minimum-idle: 1
       connection-timeout: 30000
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: "${JPA_DDL_AUTO:validate}"
     show-sql: false
     properties:
       hibernate:
         format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
 
 server:
-  port: 8080
+  port: "${PORT:8080}"
 
 jwt:
-  secret: "8fK29xLmQwPz91AaBcDeFgHiJkLmNoPqRsTuVwXyZ123456"
-  access-expiration: 900000
-  refresh-expiration: 2592000000
+  secret: "${JWT_SECRET:8fK29xLmQwPz91AaBcDeFgHiJkLmNoPqRsTuVwXyZ123456}"
+  access-expiration: "${JWT_ACCESS_EXPIRATION:900000}"
+  refresh-expiration: "${JWT_REFRESH_EXPIRATION:2592000000}"
 
 springdoc:
   api-docs:
@@ -31,3 +36,33 @@ springdoc:
     path: /swagger-ui.html
     config-url: /v3/api-docs/swagger-config
     url: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    root: "${LOG_LEVEL_ROOT:INFO}"
+    kg.sportmanager: "${LOG_LEVEL_APP:INFO}"
+    org.hibernate.SQL: WARN
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId:-},%X{userId:-}] %logger{36} - %msg%n"
+
+subscription:
+  price-per-table: "${SUBSCRIPTION_PRICE_PER_TABLE:200}"
+  currency: "${SUBSCRIPTION_CURRENCY:KGS}"
+  min-duration-months: 1
+  max-duration-months: 12
+  grace-period-days: 5
+  free-trial-days: 14
+  expiry-warning-days: 3
+  # Только MOCK поддерживается; FINIK — когда заключим договор.
+  payment-provider: "${PAYMENT_PROVIDER:MOCK}"

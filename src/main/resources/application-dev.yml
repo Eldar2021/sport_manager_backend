@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    # Без sslmode=require для локального dev
+    url: "jdbc:postgresql://localhost:5432/sport_manager"
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      # В dev можно update — для быстрых экспериментов. В prod строго validate + Flyway.
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    kg.sportmanager: DEBUG
