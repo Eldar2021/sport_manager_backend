@@ -108,7 +108,7 @@ public class SessionController {
     public ResponseEntity<SessionResultResponse> finish(
             @AuthenticationPrincipal User user,
             @Parameter(description = "ID сессии") @PathVariable String id,
-            @RequestBody(required = false) FinishSessionRequest request) {
+            @RequestBody(required = false) @Valid FinishSessionRequest request) {
 
         if (request == null) request = new FinishSessionRequest(); // discountPercent = 0
         return ResponseEntity.ok(sessionService.finish(user, id, request));
