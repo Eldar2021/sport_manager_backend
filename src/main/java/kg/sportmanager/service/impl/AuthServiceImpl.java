@@ -171,7 +171,12 @@ public class AuthServiceImpl implements AuthService {
         if (user == null) {
             throw new AppException("UNAUTHORIZED", HttpStatus.BAD_REQUEST);
         }
-        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+        // Defansif: gelen login (email/phone) authenticated principal ile eşleşmeli.
+        // Aksi halde çalınmış token başka birinin parolasını değiştiremesin.
+        String login = request.getLogin();
+        boolean matchesEmail = login.equalsIgnoreCase(user.getEmail());
+        boolean matchesPhone = login.equals(user.getPhone());
+        if (!matchesEmail && !matchesPhone) {
             throw new AppException("INVALID_CREDENTIALS", HttpStatus.BAD_REQUEST);
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));

@@ -278,19 +278,24 @@ App Store / Play Store uyumluluğu — kullanıcı kendi hesabını siler.
 
 ## 1.7 POST `/api/v1/auth/update-password` — Authenticated (Both roles)
 
-Authenticated kullanıcının parolasını günceller. Yeni token pair döner;
-eski refresh DB'de invalidate edilir (rotation).
+Authenticated kullanıcı yeni parolasını ayarlar. **Eski parola sorgulanmaz** —
+"parolamı unuttum" akışından sonra (kullanıcı geçici parola ile login olduktan
+sonra) ya da settings'ten direkt çağrılır. Çalınmış token koruması: `login`
+alanı authenticated user'ın email/phone'u ile eşleşmek zorunda.
 
 **Request:**
 
 ```json
 {
-  "oldPassword": "OldPass12",
-  "newPassword": "NewPass99"
+  "login": "test@gmail.com",
+  "newPassword": "test12345"
 }
 ```
 
-`oldPassword` NotBlank. `newPassword` 8–100 char.
+| Field         | Kural                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `login`       | NotBlank. Email veya phone — authenticated principal ile match etmeli. |
+| `newPassword` | NotBlank, 8–100 char.                                                  |
 
 **Response 200:**
 
@@ -301,15 +306,15 @@ eski refresh DB'de invalidate edilir (rotation).
 }
 ```
 
-> `user` alanı dönmez (login/refresh ile aynı sözleşme).
+> `user` alanı dönmez (login/refresh ile aynı sözleşme). Refresh rotation: eski refresh DB'de invalidate edilir.
 
 **Errors:**
 | HTTP | code |
 |------|------|
-| 400 | `INVALID_CREDENTIALS` (yanlış `oldPassword`) |
+| 400 | `INVALID_CREDENTIALS` (`login` authenticated user ile eşleşmiyor) |
 | 400 | `UNAUTHORIZED` / `INVALID_TOKEN` (token yok / bozuk) |
 | 401 | `SESSION_EXPIRED` (access token expired) |
-| 422 | `VALIDATION_ERROR` (boş alan, kısa `newPassword`) |
+| 422 | `VALIDATION_ERROR` (boş `login` / `newPassword`, kısa parola, eksik alan) |
 
 ---
 
