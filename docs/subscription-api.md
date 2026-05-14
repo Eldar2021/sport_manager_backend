@@ -661,7 +661,9 @@ POST /api/v1/subscription/payment/{id}/confirm
 
 ## Profile entegrasyonu (özet)
 
-Profile endpoint'i (mobile'da `AuthRepository.fetchProfile()`, backend tarafında `GET /profile` veya `GET /me` — bu task'in kapsamı dışı, ayrı doc) zaten `subscriptionEndDate` field'ı içeriyor (bkz. `packages/auth/lib/models/profile_model.dart`). Subscription rollout'unda profile response'una **subscription özeti** eklenir:
+Profile endpoint'i **`GET /api/v1/profile`** olarak uygulandı — tam doc:
+[profile-api.md](profile-api.md). OWNER için response içinde `profileData.subscription`
+**slim summary** olarak döner:
 
 ```json
 {

@@ -94,4 +94,16 @@ public class AuthController {
                                                             @RequestBody @Valid UpdatePasswordRequest request) {
         return ResponseEntity.ok(authService.updatePassword(user, request));
     }
+
+    @Operation(summary = "Удаление аккаунта",
+            description = "OWNER → cascade hard-delete всех связанных данных + own row. "
+                    + "MANAGER → soft-delete с анонимизацией PII (email/phone обнуляются, "
+                    + "deletedAt = now). Для App Store / Play Store compliance.")
+    @ApiResponse(responseCode = "200", description = "Аккаунт удалён")
+    @SecurityRequirement(name = "bearerAuth")
+    @org.springframework.web.bind.annotation.DeleteMapping("/account")
+    public ResponseEntity<Void> deleteAccount(@AuthenticationPrincipal User user) {
+        authService.deleteAccount(user);
+        return ResponseEntity.ok().build();
+    }
 }

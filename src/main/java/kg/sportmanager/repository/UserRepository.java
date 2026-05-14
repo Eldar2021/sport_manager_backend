@@ -33,4 +33,17 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Reports/Managers: найти менеджера по id с проверкой принадлежности владельцу. */
     Optional<User> findByIdAndOwnerAndDeletedAtIsNull(UUID id, User owner);
+
+    /** Profile: число активных (не soft-deleted) менеджеров у данного владельца. */
+    long countByOwnerAndRoleAndDeletedAtIsNull(User owner, User.Role role);
+
+    /** Register/login: ensure uniqueness check ignores soft-deleted (anonymized) rows. */
+    boolean existsByEmailAndDeletedAtIsNull(String email);
+
+    boolean existsByPhoneAndDeletedAtIsNull(String phone);
+
+    /** Account-delete cascade: hard-delete every manager (incl. soft-deleted) under owner. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("DELETE FROM User u WHERE u.owner = :owner")
+    int deleteAllByOwner(@org.springframework.data.repository.query.Param("owner") User owner);
 }
