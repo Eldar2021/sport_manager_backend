@@ -27,8 +27,8 @@ server:
 
 jwt:
   secret: "${JWT_SECRET:8fK29xLmQwPz91AaBcDeFgHiJkLmNoPqRsTuVwXyZ123456}"
-  access-expiration: "${JWT_ACCESS_EXPIRATION:900000}"
-  refresh-expiration: "${JWT_REFRESH_EXPIRATION:2592000000}"
+  access-expiration: "${JWT_ACCESS_EXPIRATION:30000}"
+  refresh-expiration: "${JWT_REFRESH_EXPIRATION:60000}"
 
 springdoc:
   api-docs:
