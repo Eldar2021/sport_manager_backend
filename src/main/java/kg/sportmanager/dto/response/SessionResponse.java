@@ -10,6 +10,8 @@ public class SessionResponse {
     private String tableId;
     /** Кто стартовал сессию (per home_page_api.md / managerId). */
     private String managerId;
+    /** Записывается при старте сессии, не меняется потом. Может быть null. */
+    private String customerName;
     private boolean isActive;
     private boolean isPaused;
     private String startedAt;

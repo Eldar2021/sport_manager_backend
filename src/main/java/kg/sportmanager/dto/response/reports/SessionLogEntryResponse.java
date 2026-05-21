@@ -15,6 +15,7 @@ public class SessionLogEntryResponse {
     private String tableName;       // может быть null
     private int tableNumber;
     private String venueName;
+    private String customerName;    // снапшот из start, может быть null
     private Instant startedAt;
     private Instant endedAt;
     private String status;          // COMPLETED | CANCELLED

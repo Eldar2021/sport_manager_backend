@@ -615,6 +615,7 @@ public class ReportsServiceImpl implements ReportsService {
                 .tableName(s.getTable().getName())
                 .tableNumber(s.getTable().getNumber())
                 .venueName(s.getTable().getVenue().getName())
+                .customerName(s.getCustomerName())
                 .startedAt(s.getStartedAt())
                 .endedAt(s.getEndedAt())
                 .status(s.getStatus().name())

@@ -27,6 +27,13 @@ class StartSessionApiTest extends SessionTestSupport {
         return m;
     }
 
+    private Map<String, Object> payload(String tableId, String customerName) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("tableId", tableId);
+        m.put("customerName", customerName);
+        return m;
+    }
+
     @Test
     @DisplayName("OWNER yeni session başlatır → 201, status=ACTIVE, snapshot fields dolu")
     void owner_startSession_happyPath() throws Exception {
@@ -178,6 +185,89 @@ class StartSessionApiTest extends SessionTestSupport {
 
         mockMvc.perform(postWithBearer(URL, payload("not-a-uuid"), accessFor(owner)))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("customerName: trim edilir, DB'ye yazılır, response'ta döner; pause body'sindeki yeni değer YOK SAYILIR (immutability)")
+    void customerName_isTrimmedAndImmutableAfterStart() throws Exception {
+        User owner = createOwner("owner@x.com", "+996700000412", "Test1234");
+        createActiveTrial(owner);
+        Venue v = createVenue(owner, "V", 1, true);
+        Tables t = createTable(v, "T", 1, 250, Tables.TarifType.HOUR);
+
+        MvcResult started = mockMvc.perform(postWithBearer(URL,
+                        payload(t.getId().toString(), "  Asan  "), accessFor(owner)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerName").value("Asan"))
+                .andReturn();
+        java.util.UUID sessionId = java.util.UUID.fromString(body(started).get("id").asText());
+
+        // DB snapshot
+        assertThat(sessionRepository.findById(sessionId).orElseThrow().getCustomerName())
+                .isEqualTo("Asan");
+
+        // Pause body'sinde manipülasyon denemesi — Jackson DTO'da alan tanımsız, ignore edilir.
+        // Response'taki customerName start'tan korunmalı.
+        Map<String, Object> tamper = new HashMap<>();
+        tamper.put("customerName", "Manipulated");
+        mockMvc.perform(postWithBearer("/api/v1/session/" + sessionId + "/pause", tamper, accessFor(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerName").value("Asan"));
+
+        assertThat(sessionRepository.findById(sessionId).orElseThrow().getCustomerName())
+                .as("pause body'sinden gelen yeni isim DB'ye yazılmamalı (snapshot/immutable)")
+                .isEqualTo("Asan");
+    }
+
+    @Test
+    @DisplayName("customerName: boş/whitespace → NULL (hata değil), gönderilmemiş ile aynı davranış")
+    void customerName_blankBecomesNull() throws Exception {
+        User owner = createOwner("owner@x.com", "+996700000413", "Test1234");
+        createActiveTrial(owner);
+        Venue v = createVenue(owner, "V", 1, true);
+        Tables t1 = createTable(v, "T1", 1, 250, Tables.TarifType.HOUR);
+        Tables t2 = createTable(v, "T2", 2, 250, Tables.TarifType.HOUR);
+
+        // Whitespace-only
+        MvcResult r1 = mockMvc.perform(postWithBearer(URL,
+                        payload(t1.getId().toString(), "   "), accessFor(owner)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerName").isEmpty())
+                .andReturn();
+        assertThat(sessionRepository.findById(java.util.UUID.fromString(body(r1).get("id").asText()))
+                .orElseThrow().getCustomerName()).isNull();
+
+        // Hiç gönderilmemiş
+        MvcResult r2 = mockMvc.perform(postWithBearer(URL,
+                        payload(t2.getId().toString()), accessFor(owner)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerName").isEmpty())
+                .andReturn();
+        assertThat(sessionRepository.findById(java.util.UUID.fromString(body(r2).get("id").asText()))
+                .orElseThrow().getCustomerName()).isNull();
+    }
+
+    @Test
+    @DisplayName("customerName: trim sonrası >80 char → 422 INVALID_CUSTOMER_NAME")
+    void customerName_tooLong_returns422() throws Exception {
+        User owner = createOwner("owner@x.com", "+996700000414", "Test1234");
+        createActiveTrial(owner);
+        Venue v = createVenue(owner, "V", 1, true);
+        Tables t = createTable(v, "T", 1, 250, Tables.TarifType.HOUR);
+
+        String tooLong = "A".repeat(81);
+        MvcResult r = mockMvc.perform(postWithBearer(URL,
+                        payload(t.getId().toString(), tooLong), accessFor(owner)))
+                .andExpect(status().isUnprocessableEntity())
+                .andReturn();
+        assertErrorEnvelope(body(r), "INVALID_CUSTOMER_NAME");
+
+        // Sınırda — tam 80 char (trim sonrası) kabul edilmeli
+        String exact = "B".repeat(80);
+        mockMvc.perform(postWithBearer(URL,
+                        payload(t.getId().toString(), "  " + exact + "  "), accessFor(owner)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerName").value(exact));
     }
 
     @Test

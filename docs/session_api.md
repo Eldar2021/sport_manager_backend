@@ -60,6 +60,8 @@ Masa kullanım sürelerini yöneten endpoint'ler. Bir masada müşteri oturduğu
 
 7. **Pause history backend'de tutulur, mobile'a dönmez.** Mobile sadece `totalPausedSeconds` ile sayacı doğru çalıştırır. Detaylı pause kayıtları DB'de kalır (audit/rapor için).
 
+8. **`customerName` opsiyoneldir ve sadece `start`'ta yazılır.** Müşteriyi masa numarası yerine adıyla bulmak için kullanılır. Session boyunca **değişmez** — `pause` / `resume` / `finish` / `cancel` body'sinde gönderilse bile yok sayılır. Manager'ın isim değiştirip raporu manipüle etmesini engeller. Detaylı spec: [session_customer_name.md](session_customer_name.md).
+
 ---
 
 ## Authorization Rolleri
@@ -89,6 +91,7 @@ Aktif (ACTIVE veya PAUSED) session için. `start`, `pause`, `resume` response'la
   id: string (uuid),
   tableId: string (uuid),
   managerId: string (uuid),            // session'ı başlatan kullanıcı (owner veya manager)
+  customerName: string | null,         // start'ta yazılır, opsiyonel, snapshot
   status: "ACTIVE" | "PAUSED",
   startedAt: string (ISO 8601),
   totalPausedSeconds: integer,         // mobile sayaç hesabı için
@@ -107,6 +110,7 @@ Bitmiş session için. `finish` ve `cancel` response'larında dönen yapı.
   id: string (uuid),
   tableId: string (uuid),
   managerId: string (uuid),            // session'ı başlatan kullanıcı (kimlik audit)
+  customerName: string | null,         // start'ta yazılan ad (snapshot)
   status: "COMPLETED" | "CANCELLED",
   startedAt: string (ISO 8601),
   endedAt: string (ISO 8601),
@@ -169,6 +173,7 @@ totalAmount    = subtotal - discountAmount
 | `SESSION_ALREADY_COMPLETED` | 409  | Session zaten tamamlanmış, işlem yapılamaz              |
 | `CANCEL_WINDOW_EXPIRED`     | 422  | 60 saniyelik iptal süresi doldu                         |
 | `INVALID_DISCOUNT`          | 422  | İndirim yüzdesi 0-100 aralığında değil                  |
+| `INVALID_CUSTOMER_NAME`     | 422  | `customerName` 80 karakteri aşıyor (trim sonrası)       |
 | `SUBSCRIPTION_REQUIRED`     | 403  | Owner aboneliği `EXPIRED` veya `GRACE@0` (yazma gate; bkz. [subscription-api.md](subscription-api.md#subscription-gate--diğer-endpointlere-etkisi)) |
 
 ---
@@ -189,7 +194,8 @@ POST /api/v1/session/start
 
 ```json
 {
-  "tableId": "660e8400-e29b-41d4-a716-446655440001"
+  "tableId": "660e8400-e29b-41d4-a716-446655440001",
+  "customerName": "Asan"
 }
 ```
 
@@ -197,8 +203,9 @@ POST /api/v1/session/start
 
 **Validation:**
 | Field | Type | Required | Rules |
-| -------- | ---- | :------: | ------------------------------ |
+| -------------- | ------ | :------: | ------------------------------ |
 | tableId | uuid | ✅ | Kullanıcının erişebildiği masa |
+| customerName | string | ❌ | Trim sonrası 1-80 karakter. Boş/trim sonrası boşsa `NULL` olarak saklanır (hata dönülmez). 80+ karakter → `422 INVALID_CUSTOMER_NAME`. |
 
 **Response (201) — SessionLite:**
 
@@ -207,6 +214,7 @@ POST /api/v1/session/start
   "id": "770e8400-e29b-41d4-a716-446655440002",
   "tableId": "660e8400-e29b-41d4-a716-446655440001",
   "managerId": "user-101",
+  "customerName": "Asan",
   "status": "ACTIVE",
   "startedAt": "2026-04-27T18:42:00.000Z",
   "totalPausedSeconds": 0,
@@ -216,10 +224,13 @@ POST /api/v1/session/start
 }
 ```
 
+> Diğer response örneklerinde gösterilmiyor olsa da `customerName` alanı `pause` / `resume` / `finish` / `cancel` response'larında da **aynı şekilde** döner — start'ta yazılan değer korunur, bu endpoint'ler değiştiremez.
+
 **Errors:**
 
 - `404 TABLE_NOT_FOUND`
 - `409 TABLE_HAS_ACTIVE_SESSION`
+- `422 INVALID_CUSTOMER_NAME` — `customerName` 80 karakteri aşıyor
 - `403 FORBIDDEN`
 - `403 SUBSCRIPTION_REQUIRED` — owner aboneliği `EXPIRED` / `GRACE@0`
 
