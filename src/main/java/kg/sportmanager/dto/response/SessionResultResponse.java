@@ -19,6 +19,9 @@ public class SessionResultResponse {
     /** Кто стартовал сессию (для аудита/reports). */
     private UUID managerId;
 
+    /** Имя клиента, записанное в start (snapshot). Может быть null. */
+    private String customerName;
+
     /** COMPLETED | CANCELLED */
     private String status;
 

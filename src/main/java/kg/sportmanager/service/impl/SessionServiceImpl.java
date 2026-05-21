@@ -30,6 +30,9 @@ public class SessionServiceImpl implements SessionService {
     /** Окно отмены для менеджера — 60 секунд. */
     private static final long CANCEL_WINDOW_SECONDS = 60L;
 
+    /** Максимальная длина customerName (после trim). См. docs/session_customer_name.md. */
+    private static final int CUSTOMER_NAME_MAX_LENGTH = 80;
+
     private final SessionRepository sessionRepository;
     private final TableRepository tableRepository;
     private final SessionMapper mapper;
@@ -54,6 +57,10 @@ public class SessionServiceImpl implements SessionService {
             throw new AppException("TABLE_HAS_ACTIVE_SESSION", HttpStatus.CONFLICT);
         }
 
+        // Нормализация customerName: trim → пусто? NULL : проверить длину.
+        // Подробнее: docs/session_customer_name.md.
+        String customerName = normalizeCustomerName(request.getCustomerName());
+
         Instant now = Instant.now(); // Время пишет backend — критическое правило
 
         Session session = Session.builder()
@@ -66,6 +73,7 @@ public class SessionServiceImpl implements SessionService {
                 .tarifTypeSnapshot(table.getTarifType())
                 .manager(user)
                 .status(Session.SessionStatus.ACTIVE)
+                .customerName(customerName)
                 .build();
 
         sessionRepository.save(session);
@@ -253,6 +261,22 @@ public class SessionServiceImpl implements SessionService {
             case DAY    -> billableSeconds / 86400.0;
         };
         return (int) Math.round(units * tarifAmount);
+    }
+
+    /**
+     * Нормализует customerName согласно spec:
+     *  - null → null
+     *  - trim; пусто → null
+     *  - длина > 80 → 422 INVALID_CUSTOMER_NAME
+     */
+    private String normalizeCustomerName(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.length() > CUSTOMER_NAME_MAX_LENGTH) {
+            throw new AppException("INVALID_CUSTOMER_NAME", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        return trimmed;
     }
 
     private UUID parseUuid(String id) {

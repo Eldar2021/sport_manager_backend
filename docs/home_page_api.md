@@ -141,6 +141,7 @@ Validation hatası ise `details` field'ı doldurulur:
   id: string (uuid),
   tableId: string (uuid),
   managerId: string (uuid),       // session'ı başlatan kullanıcı (owner veya manager)
+  customerName: string | null,    // start'ta yazılan müşteri adı (snapshot, opsiyonel)
   isActive: boolean,
   isPaused: boolean,
   startedAt: string (ISO 8601),
@@ -155,6 +156,8 @@ Validation hatası ise `details` field'ı doldurulur:
 > **Snapshot kuralı:** Session başladığında masa fiyatı kopyalanır. Owner session ortasında fiyatı değiştirirse mevcut session etkilenmez.
 >
 > **`managerId`:** Session'ı başlatan kullanıcının ID'si. Owner kendisi başlattıysa owner'ın ID'si, manager başlattıysa manager'ın ID'si. Reports tarafı (manager performans/fraud sinyali) bu alanı kullanır. Bkz. [reports-api.md](reports-api.md).
+>
+> **`customerName`:** Yalnızca `POST /api/v1/session/start` body'sinde yazılır; sonraki `pause`/`resume`/`finish`/`cancel` çağrıları **değiştiremez**. Null olabilir. Detay spec: [session_customer_name.md](session_customer_name.md).
 
 ### SelectedVenueResponse
 
@@ -283,6 +286,7 @@ GET /api/v1/venue/selected
         "id": "770e8400-e29b-41d4-a716-446655440002",
         "tableId": "660e8400-e29b-41d4-a716-446655440001",
         "managerId": "user-101",
+        "customerName": "Asan",
         "isActive": true,
         "isPaused": false,
         "startedAt": "2026-04-27T18:42:00.000Z",

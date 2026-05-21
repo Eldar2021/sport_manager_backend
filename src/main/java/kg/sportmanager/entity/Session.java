@@ -61,6 +61,9 @@ public class Session {
 
     private String cancelReason;
 
+    @Column(name = "customer_name", length = 80)
+    private String customerName;
+
     public enum SessionStatus {
         ACTIVE, COMPLETED, CANCELLED
     }
