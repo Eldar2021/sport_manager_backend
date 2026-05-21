@@ -22,19 +22,60 @@ jobs:
       - name: Build jar
         run: mvn clean package -DskipTests
 
-      - name: Copy jar to server
+      # Upload to a staging dir under /tmp. We do NOT write directly to the
+      # systemd jar path because the live unit runs as user `sportmanager`
+      # from /opt/sportmanager/app.jar and needs an atomic, owned install.
+      - name: Upload jar to staging dir
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "target/*.jar"
-          target: "/root/java/"
+          source: "target/sportmanager-*.jar"
+          target: "/tmp/sportmanager-deploy/"
+          rm: true
 
-      - name: Restart app
+      # Install into /opt/sportmanager/app.jar with the right owner, restart
+      # systemd unit, then wait for /actuator/health to report UP before
+      # declaring success — otherwise the job stays green even when the new
+      # JVM fails to start (which is how prior deploys silently shipped
+      # nothing for weeks).
+      - name: Install jar, restart, and verify health
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: systemctl restart sportmanager
+          script: |
+            set -euo pipefail
+
+            # Spring Boot repackage leaves a *.original sibling; pick the fat jar.
+            NEW_JAR=$(ls /tmp/sportmanager-deploy/target/sportmanager-*.jar \
+                      | grep -v '\.original$' | head -1)
+            if [ -z "$NEW_JAR" ]; then
+              echo "ERROR: no runnable jar in /tmp/sportmanager-deploy/target/" >&2
+              ls -la /tmp/sportmanager-deploy/ >&2 || true
+              exit 1
+            fi
+            echo "Installing $NEW_JAR -> /opt/sportmanager/app.jar"
+
+            install -o sportmanager -g sportmanager -m 644 \
+                    "$NEW_JAR" /opt/sportmanager/app.jar
+            rm -rf /tmp/sportmanager-deploy
+
+            systemctl restart sportmanager
+
+            # App startup is ~56s on this droplet; poll up to ~110s.
+            for i in $(seq 1 22); do
+              if curl -fsS http://127.0.0.1:8080/actuator/health \
+                   | grep -q '"status":"UP"'; then
+                echo "App is UP after ${i} health checks"
+                exit 0
+              fi
+              sleep 5
+            done
+
+            echo "ERROR: sportmanager did not become healthy in ~110s" >&2
+            systemctl status sportmanager --no-pager -n 50 >&2 || true
+            journalctl -u sportmanager -n 200 --no-pager >&2 || true
+            exit 1
