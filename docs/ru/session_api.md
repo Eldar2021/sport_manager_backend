@@ -60,6 +60,8 @@
 
 7. **История пауз хранится на бэкенде, на мобильный не возвращается.** Клиент использует только `totalPausedSeconds` для корректного отображения таймера. Подробные записи о паузах остаются в БД (для аудита/отчётов).
 
+8. **`customerName` опциональное и пишется только в `start`.** Используется, чтобы найти клиента не по номеру стола, а по имени. На протяжении сессии **не меняется** — даже если поле прислано в body `pause` / `resume` / `finish` / `cancel`, оно игнорируется. Защищает от попыток менеджера переписать имя для манипуляции отчётом. Подробная спецификация: [session_customer_name.md](session_customer_name.md).
+
 ---
 
 ## Роли авторизации
@@ -89,6 +91,7 @@
   id: string (uuid),
   tableId: string (uuid),
   managerId: string (uuid),            // пользователь, запустивший сессию (owner или manager)
+  customerName: string | null,         // пишется в start, опционально, snapshot
   status: "ACTIVE" | "PAUSED",
   startedAt: string (ISO 8601),
   totalPausedSeconds: integer,         // для расчёта таймера на клиенте
@@ -107,6 +110,7 @@
   id: string (uuid),
   tableId: string (uuid),
   managerId: string (uuid),            // пользователь, запустивший сессию (для аудита)
+  customerName: string | null,         // имя, записанное при start (snapshot)
   status: "COMPLETED" | "CANCELLED",
   startedAt: string (ISO 8601),
   endedAt: string (ISO 8601),
@@ -169,6 +173,7 @@ totalAmount    = subtotal - discountAmount
 | `SESSION_ALREADY_COMPLETED` | 409  | Сессия уже завершена, действие невозможно                                                                                                          |
 | `CANCEL_WINDOW_EXPIRED`     | 422  | Окно отмены (60 секунд) истекло                                                                                                                    |
 | `INVALID_DISCOUNT`          | 422  | Процент скидки не в диапазоне 0-100                                                                                                                |
+| `INVALID_CUSTOMER_NAME`     | 422  | `customerName` превышает 80 символов (после trim)                                                                                                  |
 | `SUBSCRIPTION_REQUIRED`     | 403  | Подписка владельца `EXPIRED` или `GRACE@0` (write-gate; см. [subscription-api.md](subscription-api.md#subscription-gate--влияние-на-другие-эндпоинты)) |
 
 ---
@@ -189,16 +194,18 @@ POST /api/v1/session/start
 
 ```json
 {
-  "tableId": "660e8400-e29b-41d4-a716-446655440001"
+  "tableId": "660e8400-e29b-41d4-a716-446655440001",
+  "customerName": "Asan"
 }
 ```
 
 > `startedAt` в теле не передаётся. Бэкенд использует своё серверное время.
 
 **Валидация:**
-| Поле    | Тип   | Обязательное | Правила                          |
-| ------- | ----- | :----------: | -------------------------------- |
-| tableId | uuid  |      ✅      | Доступный пользователю стол      |
+| Поле           | Тип    | Обязательное | Правила                          |
+| -------------- | ------ | :----------: | -------------------------------- |
+| tableId        | uuid   |      ✅      | Доступный пользователю стол      |
+| customerName   | string |      ❌      | После trim 1-80 символов. Пусто / пустая строка → пишется `NULL` (ошибка не возвращается). 80+ символов → `422 INVALID_CUSTOMER_NAME`. |
 
 **Ответ (201) — SessionLite:**
 
@@ -207,6 +214,7 @@ POST /api/v1/session/start
   "id": "770e8400-e29b-41d4-a716-446655440002",
   "tableId": "660e8400-e29b-41d4-a716-446655440001",
   "managerId": "user-101",
+  "customerName": "Asan",
   "status": "ACTIVE",
   "startedAt": "2026-04-27T18:42:00.000Z",
   "totalPausedSeconds": 0,
@@ -216,12 +224,15 @@ POST /api/v1/session/start
 }
 ```
 
+> Хотя в примерах ответов остальных эндпоинтов поле не показано, `customerName` возвращается также в ответах `pause` / `resume` / `finish` / `cancel` — значение, записанное при `start`, сохраняется; эти эндпоинты не могут его изменить.
+
 **Ошибки:**
 
 - `404 TABLE_NOT_FOUND`
 - `409 TABLE_HAS_ACTIVE_SESSION`
 - `403 FORBIDDEN`
 - `403 SUBSCRIPTION_REQUIRED` — подписка владельца `EXPIRED` / `GRACE@0`
+- `422 INVALID_CUSTOMER_NAME` — `customerName` превышает 80 символов
 
 **Race condition:** Бэкенд блокирует стол в транзакции. Если приходят два параллельных start — один проходит, второй получает 409.
 
