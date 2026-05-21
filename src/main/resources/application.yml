@@ -54,6 +54,9 @@ logging:
     kg.sportmanager: "${LOG_LEVEL_APP:INFO}"
     org.hibernate.SQL: WARN
     org.springframework.security: WARN
+    # Flyway INFO so "applied N migrations" and skip/baseline events are visible
+    # in boot logs — silent Flyway failures hid a schema drift for weeks.
+    org.flywaydb: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId:-},%X{userId:-}] %logger{36} - %msg%n"
 
