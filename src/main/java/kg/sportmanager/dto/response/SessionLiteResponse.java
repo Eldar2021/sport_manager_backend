@@ -21,6 +21,9 @@ public class SessionLiteResponse {
     /** Кто стартовал/держит сессию (owner или manager). */
     private UUID managerId;
 
+    /** Записывается в start, не меняется потом. Может быть null. */
+    private String customerName;
+
     /** ACTIVE | PAUSED */
     private String status;
 

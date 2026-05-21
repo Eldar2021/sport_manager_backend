@@ -506,6 +506,7 @@ Query: ortak parametreler.
       "tableName": "VIP Salon",
       "tableNumber": 1,
       "venueName": "Merkez Şube",
+      "customerName": "Asan",
       "startedAt": "2026-05-14T18:42:00Z",
       "endedAt": "2026-05-14T20:12:00Z",
       "status": "COMPLETED",
@@ -520,6 +521,7 @@ Query: ortak parametreler.
       "tableName": null,
       "tableNumber": 3,
       "venueName": "Merkez Şube",
+      "customerName": null,
       "startedAt": "2026-05-14T17:05:00Z",
       "endedAt": "2026-05-14T17:05:42Z",
       "status": "CANCELLED",
@@ -546,6 +548,7 @@ Query: ortak parametreler.
 | `tableName`       | string \| null  | ✅ (null olabilir)     | ✅ (null olabilir) |
 | `tableNumber`     | integer         | ✅                     | ✅                 |
 | `venueName`       | string          | ✅                     | ✅                 |
+| `customerName`    | string \| null  | ✅ (null olabilir)     | ✅ (null olabilir) |
 | `startedAt`       | ISO8601         | ✅                     | ✅                 |
 | `endedAt`         | ISO8601         | ✅                     | ✅                 |
 | `status`          | enum            | `COMPLETED`            | `CANCELLED`        |
