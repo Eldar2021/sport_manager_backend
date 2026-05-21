@@ -22,8 +22,7 @@ jobs:
       - name: Build jar
         run: mvn clean package -DskipTests
 
-      # Upload to a staging dir under /tmp. We do NOT write directly to the
-      # systemd jar path because the live unit runs as user `sportmanager`
+      # Stage the jar under /tmp. The live unit runs as user `sportmanager`
       # from /opt/sportmanager/app.jar and needs an atomic, owned install.
       - name: Upload jar to staging dir
         uses: appleboy/scp-action@v0.1.7
@@ -35,21 +34,50 @@ jobs:
           target: "/tmp/sportmanager-deploy/"
           rm: true
 
-      # Install into /opt/sportmanager/app.jar with the right owner, restart
-      # systemd unit, then wait for /actuator/health to report UP before
-      # declaring success — otherwise the job stays green even when the new
-      # JVM fails to start (which is how prior deploys silently shipped
-      # nothing for weeks).
-      - name: Install jar, restart, and verify health
+      # Deploy pipeline:
+      #   1. Backup the currently-running jar so we can roll back atomically.
+      #   2. Install the new fat jar with the right owner/perms.
+      #   3. Restart the systemd unit.
+      #   4. Poll /actuator/health for up to ~120s.
+      #   5. If healthy → done. If not → roll back to the backup, restart
+      #      again, wait for it to come back UP, then fail the job (so the
+      #      bad commit gets a red mark on GitHub) but leave prod running.
+      #   6. If even the rollback fails (cosmic-ray-tier), exit with a
+      #      distinctive code so the on-call knows prod is actually down.
+      - name: Install jar, restart, verify health, auto-rollback on failure
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 10m
           script: |
             set -euo pipefail
 
-            # Spring Boot repackage leaves a *.original sibling; pick the fat jar.
+            JAR_LIVE=/opt/sportmanager/app.jar
+            JAR_PREV=/opt/sportmanager/app.jar.previous
+            HEALTH_URL=http://127.0.0.1:8080/actuator/health
+            POLL_TRIES=24   # 24 * 5s = 120s; startup is ~55s
+
+            wait_healthy() {
+              for i in $(seq 1 "$POLL_TRIES"); do
+                if curl -fsS "$HEALTH_URL" 2>/dev/null \
+                     | grep -q '"status":"UP"'; then
+                  echo "App UP after ${i} health checks (~$((i*5))s)"
+                  return 0
+                fi
+                sleep 5
+              done
+              return 1
+            }
+
+            dump_diag() {
+              echo "----- systemctl status -----" >&2
+              systemctl status sportmanager --no-pager -n 50 >&2 || true
+              echo "----- journalctl (last 200 lines) -----" >&2
+              journalctl -u sportmanager -n 200 --no-pager >&2 || true
+            }
+
             NEW_JAR=$(ls /tmp/sportmanager-deploy/target/sportmanager-*.jar \
                       | grep -v '\.original$' | head -1)
             if [ -z "$NEW_JAR" ]; then
@@ -57,25 +85,49 @@ jobs:
               ls -la /tmp/sportmanager-deploy/ >&2 || true
               exit 1
             fi
-            echo "Installing $NEW_JAR -> /opt/sportmanager/app.jar"
+            echo "Installing $NEW_JAR -> $JAR_LIVE"
 
-            install -o sportmanager -g sportmanager -m 644 \
-                    "$NEW_JAR" /opt/sportmanager/app.jar
+            # 1. Backup the currently-running jar (atomic, preserves owner/perms).
+            if [ -f "$JAR_LIVE" ]; then
+              cp -p "$JAR_LIVE" "$JAR_PREV"
+              echo "Backed up live jar to $JAR_PREV"
+            else
+              echo "WARN: no live jar to back up (first deploy?)"
+              # Sentinel so we know there's no rollback target.
+              rm -f "$JAR_PREV"
+            fi
+
+            # 2. Install the new jar.
+            install -o sportmanager -g sportmanager -m 644 "$NEW_JAR" "$JAR_LIVE"
             rm -rf /tmp/sportmanager-deploy
 
+            # 3. Restart.
             systemctl restart sportmanager
 
-            # App startup is ~56s on this droplet; poll up to ~110s.
-            for i in $(seq 1 22); do
-              if curl -fsS http://127.0.0.1:8080/actuator/health \
-                   | grep -q '"status":"UP"'; then
-                echo "App is UP after ${i} health checks"
-                exit 0
-              fi
-              sleep 5
-            done
+            # 4. Wait for health.
+            if wait_healthy; then
+              echo "Deploy succeeded."
+              exit 0
+            fi
 
-            echo "ERROR: sportmanager did not become healthy in ~110s" >&2
-            systemctl status sportmanager --no-pager -n 50 >&2 || true
-            journalctl -u sportmanager -n 200 --no-pager >&2 || true
-            exit 1
+            # 5. New jar never became healthy → roll back.
+            echo "ERROR: new jar did not become healthy in ~$((POLL_TRIES*5))s" >&2
+            dump_diag
+
+            if [ ! -f "$JAR_PREV" ]; then
+              echo "FATAL: no $JAR_PREV to roll back to — prod is down." >&2
+              exit 2
+            fi
+
+            echo "Rolling back to $JAR_PREV ..." >&2
+            install -o sportmanager -g sportmanager -m 644 "$JAR_PREV" "$JAR_LIVE"
+            systemctl restart sportmanager
+
+            if wait_healthy; then
+              echo "Rollback restored prod. Failing the job so the bad commit is flagged." >&2
+              exit 1
+            fi
+
+            echo "FATAL: rollback ALSO failed to become healthy — prod is down." >&2
+            dump_diag
+            exit 2
