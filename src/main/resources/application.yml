@@ -23,11 +23,12 @@ spring:
 
 server:
   port: "${PORT:8080}"
+  forward-headers-strategy: framework
 
 jwt:
   secret: "${JWT_SECRET:8fK29xLmQwPz91AaBcDeFgHiJkLmNoPqRsTuVwXyZ123456}"
-  access-expiration: "${JWT_ACCESS_EXPIRATION:900000}"
-  refresh-expiration: "${JWT_REFRESH_EXPIRATION:2592000000}"
+  access-expiration: "${JWT_ACCESS_EXPIRATION:86400000}"
+  refresh-expiration: "${JWT_REFRESH_EXPIRATION:2160000000}"
 
 springdoc:
   api-docs:
